@@ -1,9 +1,12 @@
 <?php
 
+use AsyncAws\Ses\SesClient;
+
 App::uses('AbstractTransport', 'Network/Email');
 App::uses('CakeEmail', 'Network/Email');
 App::uses('ComponentCollection', 'Controller');
 App::uses('AsyncAwsComponent', 'AsyncAws.Controller/Component');
+App::uses('MissingPackageException', 'AsyncAws.Error');
 
 /**
  * Amazon SES Email Transport for CakePHP 2.x.
@@ -11,7 +14,7 @@ App::uses('AsyncAwsComponent', 'AsyncAws.Controller/Component');
  * Uses async-aws/ses to send emails with the `SendEmail` operation of the Amazon SES API v2.
  * Uses the AsyncAws default credential chain (environment, shared files, web identity, ECS, EC2 instance metadata)
  * when key/secret are not configured.
- * Configure AWS settings under Configure::write('AsyncAws').
+ * Configure AWS settings under Configure::write('AsyncAws'). Requires `async-aws/ses`.
  */
 class AmazonSesApiTransport extends AbstractTransport
 {
@@ -33,9 +36,12 @@ class AmazonSesApiTransport extends AbstractTransport
      * Merge the transport config with the defaults. The client is created with Configure::read('AsyncAws').
      *
      * @param array $config Transport configuration.
+     * @throws \MissingPackageException When async-aws/ses is not installed.
      */
     public function __construct(array $config = [])
     {
+        MissingPackageException::check(static::clientClass(), 'async-aws/ses', 'The Amazon SES email transport');
+
         // Merge: defaults -> global -> instance config
         $this->_config = array_merge(
             $this->_config,
@@ -43,6 +49,16 @@ class AmazonSesApiTransport extends AbstractTransport
         );
 
         $this->AsyncAws = new AsyncAwsComponent(new ComponentCollection());
+    }
+
+    /**
+     * Returns the class of the SES client, which is checked to exist before the client is created.
+     *
+     * @return string
+     */
+    protected static function clientClass(): string
+    {
+        return SesClient::class;
     }
 
     /**

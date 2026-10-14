@@ -8,6 +8,7 @@ App::uses('CakeSessionHandlerInterface', 'Model/Datasource/Session');
 App::uses('ComponentCollection', 'Controller');
 App::uses('AsyncAwsComponent', 'AsyncAws.Controller/Component');
 App::uses('CakeException', 'Error');
+App::uses('MissingPackageException', 'AsyncAws.Error');
 
 /**
  * DynamoDB session handler
@@ -30,6 +31,8 @@ App::uses('CakeException', 'Error');
  * Expired sessions are not removed by PHP's garbage collection; enable Time to Live on the table with the
  * `expires` attribute so that DynamoDB removes them. This handler turns off PHP's garbage collection
  * (`session.gc_probability = 0`) because it would never remove anything.
+ *
+ * Requires `async-aws/dynamo-db`.
  */
 class DynamoDbSession implements CakeSessionHandlerInterface
 {
@@ -62,9 +65,12 @@ class DynamoDbSession implements CakeSessionHandlerInterface
      *
      * @param \AsyncAws\DynamoDb\DynamoDbClient|null $client DynamoDB client. Default: a client created with the plugin configuration.
      * @throws \CakeException When `Session.handler.table_name` is not configured.
+     * @throws \MissingPackageException When async-aws/dynamo-db is not installed.
      */
     public function __construct(?DynamoDbClient $client = null)
     {
+        MissingPackageException::check(static::clientClass(), 'async-aws/dynamo-db', 'The DynamoDB session handler');
+
         $options = (array)Configure::read('Session.handler');
         if (empty($options['table_name'])) {
             throw new CakeException('DynamoDB session handler "table_name" is not configured.');
@@ -88,6 +94,16 @@ class DynamoDbSession implements CakeSessionHandlerInterface
         if (session_status() !== PHP_SESSION_ACTIVE) {
             ini_set('session.gc_probability', '0');
         }
+    }
+
+    /**
+     * Returns the class of the DynamoDB client, which is checked to exist before the client is created.
+     *
+     * @return string
+     */
+    protected static function clientClass(): string
+    {
+        return DynamoDbClient::class;
     }
 
     /**

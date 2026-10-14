@@ -11,6 +11,7 @@ App::uses('ComponentCollection', 'Controller');
 App::uses('AsyncAwsComponent', 'AsyncAws.Controller/Component');
 App::uses('CakeLog', 'Log');
 App::uses('Inflector', 'Utility');
+App::uses('MissingPackageException', 'AsyncAws.Error');
 
 /**
  * DynamoDB storage engine for cache
@@ -26,6 +27,8 @@ App::uses('Inflector', 'Utility');
  *
  * The client is created with `AsyncAwsComponent::createDynamoDb()`, so it uses the `AsyncAws` configuration.
  * `clientConfig` overrides it for this cache configuration, and `client` sets the client itself.
+ * The engine requires `async-aws/dynamo-db`; without it, `Cache::config()` throws a `CacheException` that names
+ * the package.
  *
  * Each item has the cache key (`keyAttribute`, string partition key), the value (`valueAttribute`, a number for
  * integers and the serialized value otherwise) and the expiration time (`expiresAttribute`, Unix epoch seconds).
@@ -83,9 +86,16 @@ class DynamoDbEngine extends CacheEngine
      *
      * @param array $settings array of setting for the engine
      * @return bool True if the engine has been successfully initialized, false if not
+     * @throws \CacheException When async-aws/dynamo-db is not installed.
      */
     public function init($settings = [])
     {
+        if (!class_exists(static::clientClass())) {
+            // Thrown rather than returning false, like MemcachedEngine does for a missing feature, so that the
+            // message names the package instead of Cache's generic "not properly configured".
+            throw new CacheException(MissingPackageException::message('async-aws/dynamo-db', 'The DynamoDB cache engine'));
+        }
+
         parent::init(array_merge([
             'engine' => 'AsyncAws.DynamoDb',
             'prefix' => Inflector::slug(APP_DIR) . '_',
@@ -111,6 +121,16 @@ class DynamoDbEngine extends CacheEngine
         }
 
         return true;
+    }
+
+    /**
+     * Returns the class of the DynamoDB client, which is checked to exist before the client is created.
+     *
+     * @return string
+     */
+    protected static function clientClass(): string
+    {
+        return DynamoDbClient::class;
     }
 
     /**
