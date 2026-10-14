@@ -1,0 +1,200 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - '1.x'
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches:
+      - '**'
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  phpunit:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version:
+          - '8.1'
+          - '8.2'
+          - '8.3'
+          - '8.4'
+          - '8.5'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          coverage: xdebug
+
+      - name: Composer get cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache Composer
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-php${{ matrix.php-version }}-composer-${{ hashFiles('**/composer.json') }}
+          restore-keys: |
+            ${{ runner.os }}-php${{ matrix.php-version }}-composer-
+
+      - name: Install Composer Packages
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Make temporary directories writable
+        run: |
+          chmod -R 777 ./vendor/pieceofcake2/app/tmp
+          chmod -R 777 ./vendor/pieceofcake2/app/logs
+
+      - name: Setup problem matchers for PHPUnit
+        run: echo "::add-matcher::${{ runner.tool_cache }}/phpunit.json"
+
+      - name: Run Tests
+        run: ./vendor/bin/phpunit --coverage-clover coverage.xml --log-junit junit.xml --colors=always
+
+      - name: Test summary
+        if: ${{ !cancelled() }}
+        uses: pieceofcake2/.github/actions/ci-summary@master
+        with:
+          type: junit
+          title: PHPUnit — PHP ${{ matrix.php-version }}
+          file: junit.xml
+          coverage: coverage.xml
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v7
+        with:
+          use_oidc: true
+          report_type: test_results
+          files: ./junit.xml
+          flags: php${{ matrix.php-version }}
+          name: PHP ${{ matrix.php-version }}
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          use_oidc: true
+          files: ./coverage.xml
+          flags: php${{ matrix.php-version }}
+          name: PHP ${{ matrix.php-version }}
+
+      - name: Upload coverage reports to Qlty
+        uses: qltysh/qlty-action/coverage@v2
+        with:
+          oidc: true
+          command: publish
+          files: coverage.xml
+          format: clover
+          incomplete: true
+          name: PHP ${{ matrix.php-version }}
+
+  qlty:
+    runs-on: ubuntu-latest
+
+    needs:
+      - phpunit
+
+    steps:
+      - uses: qltysh/qlty-action/coverage@v2
+        with:
+          oidc: true
+          command: complete
+
+  phpcs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: cs2pr
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Check PHP code style
+        id: phpcs
+        run: ./vendor/bin/phpcs --report-full --report-checkstyle=./phpcs-report.xml
+
+      - name: Show PHPCS results in PR
+        if: ${{ always() && steps.phpcs.outcome == 'failure' }}
+        run: cs2pr ./phpcs-report.xml
+
+      - name: PHPCS summary
+        if: ${{ !cancelled() }}
+        uses: pieceofcake2/.github/actions/ci-summary@master
+        with:
+          type: checkstyle
+          title: PHPCS
+          file: phpcs-report.xml
+
+  phpstan:
+    name: PHPStan
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: cs2pr
+
+      - name: Composer get cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache Composer
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-php8.4-composer-${{ hashFiles('**/composer.json') }}
+          restore-keys: |
+            ${{ runner.os }}-php8.4-composer-
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Run PHPStan
+        id: phpstan
+        run: ./vendor/bin/phpstan analyse --no-progress --error-format=checkstyle > ./phpstan-report.xml
+
+      - name: Show PHPStan results in PR
+        if: ${{ always() && steps.phpstan.outcome == 'failure' }}
+        run: cs2pr ./phpstan-report.xml
+
+      - name: PHPStan summary
+        if: ${{ !cancelled() }}
+        uses: pieceofcake2/.github/actions/ci-summary@master
+        with:
+          type: phpstan
+          title: PHPStan
+          file: phpstan-report.xml
