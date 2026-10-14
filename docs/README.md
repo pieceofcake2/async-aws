@@ -29,8 +29,35 @@ Install the plugin with [Composer](https://getcomposer.org/):
 composer require pieceofcake2/async-aws
 ```
 
-It installs `async-aws/dynamo-db`, `async-aws/ses` and `async-aws/simple-s3` (with
-`async-aws/s3`). To use another service with the component, install its package, for example
+The plugin requires only `async-aws/core`. Install the AsyncAws package of each feature you use:
+
+| Feature | Package |
+| --- | --- |
+| [DynamoDB session handler](#dynamodb-session-handler) | `async-aws/dynamo-db` |
+| [DynamoDB cache engine](#dynamodb-cache-engine) | `async-aws/dynamo-db` |
+| [Amazon SES email transport](#amazon-ses-email-transport) | `async-aws/ses` |
+| [S3 storage](#s3-storage) | `async-aws/simple-s3` (installs `async-aws/s3`) |
+| `$this->AsyncAws->S3`, `createS3()` | `async-aws/s3` |
+| `$this->AsyncAws->SimpleS3`, `createSimpleS3()` | `async-aws/simple-s3` |
+| `$this->AsyncAws->DynamoDb`, `Ses`, ... | `async-aws/dynamo-db`, `async-aws/ses`, ... |
+
+For example:
+
+```bash
+# Sessions (and cache) in DynamoDB only
+composer require pieceofcake2/async-aws async-aws/dynamo-db
+
+# Email with Amazon SES only
+composer require pieceofcake2/async-aws async-aws/ses
+
+# Sessions in DynamoDB, email with SES and files in S3
+composer require pieceofcake2/async-aws async-aws/dynamo-db async-aws/ses async-aws/simple-s3
+```
+
+When a feature is used without its package, a `MissingPackageException` (a `CacheException` for
+the cache engine) is thrown with the package and the command to install it, for example:
+"The DynamoDB session handler requires async-aws/dynamo-db. Install it with: composer require
+async-aws/dynamo-db". To use another service with the component, install its package, for example
 `composer require async-aws/sqs`.
 
 The plugin has the `cakephp-plugin` type, so it is installed into your plugins directory
@@ -363,7 +390,7 @@ file_put_contents(TMP . 'today.csv', $storage->read('s3://my-bucket/reports/toda
 
 | pieceofcake2/aws | pieceofcake2/async-aws |
 | --- | --- |
-| `composer require pieceofcake2/aws` | `composer require pieceofcake2/async-aws` |
+| `composer require pieceofcake2/aws` | `composer require pieceofcake2/async-aws` and the packages of the services you use, e.g. `async-aws/dynamo-db` (see [Installation](#installation)). |
 | `CakePlugin::load('Aws')` | `CakePlugin::load('AsyncAws')` |
 | `Configure::write('Aws', [...])` | `Configure::write('AsyncAws', [...])`, or keep `Aws` (used when `AsyncAws` is not set). `version` is ignored. |
 | `'credentials' => ['key' => ..., 'secret' => ...]` | The same, or `accessKeyId` and `accessKeySecret`. |

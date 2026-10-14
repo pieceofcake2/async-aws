@@ -14,8 +14,8 @@ component that creates AsyncAws clients, a DynamoDB session handler, a DynamoDB 
 an Amazon SES email transport and a small S3 storage helper.
 
 It is the AsyncAws counterpart of [pieceofcake2/aws](https://github.com/pieceofcake2/aws),
-which uses the full AWS SDK for PHP. AsyncAws installs only the services you use, which keeps
-deployments small, for example on AWS Lambda with [Bref](https://bref.sh).
+which uses the full AWS SDK for PHP. AsyncAws has one package per service and you install only
+those you use, which keeps deployments small, for example on AWS Lambda with [Bref](https://bref.sh).
 
 ## Requirements
 
@@ -26,6 +26,20 @@ deployments small, for example on AWS Lambda with [Bref](https://bref.sh).
 
 ```bash
 composer require pieceofcake2/async-aws
+```
+
+The plugin requires only `async-aws/core`. Install the AsyncAws package of each feature you use:
+
+| Feature | Package |
+| --- | --- |
+| DynamoDB session handler, DynamoDB cache engine | `async-aws/dynamo-db` |
+| Amazon SES email transport | `async-aws/ses` |
+| S3 storage helper | `async-aws/simple-s3` |
+
+For example, for sessions in DynamoDB only:
+
+```bash
+composer require pieceofcake2/async-aws async-aws/dynamo-db
 ```
 
 Then load the plugin with `CakePlugin::load('AsyncAws')`.
