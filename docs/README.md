@@ -192,17 +192,19 @@ Configure::write('Session', [
         // Optional (default: 'locking' => true)
         // 'locking' => true,
     ],
+    // Minutes; also the lifetime written to the "expires" attribute of each item
     'timeout' => 1440,
     'ini' => [
         'session.cookie_lifetime' => 0,
-        // Written to the "expires" attribute of each item
-        'session.gc_maxlifetime' => 259200,
+        // Expired sessions are removed by Time to Live, not by PHP's garbage collection
+        'session.gc_probability' => 0,
     ],
 ]);
 ```
 
 - `handler.table_name` is required; a `CakeException` is thrown when it is missing.
-- The table must exist, with a string partition key named `id`.
+- The table must exist, with a string partition key named `id`, and Time to Live should be
+  enabled on the `expires` attribute (see [Creating the Session Table](#creating-the-session-table)).
 - The DynamoDB client is created with the `AsyncAws` configuration, so the plugin must be
   loaded and `AsyncAws` configured before the session starts.
 - If several applications share a domain and a table, give each application its own session
@@ -215,7 +217,7 @@ the session handler of the AWS SDK for PHP, which pieceofcake2/aws uses:
 | --- | --- | --- |
 | `locking` | `true` | Lock the session while a request uses it, so that concurrent requests do not overwrite each other's changes. |
 | `consistent_read` | `true` | Use strongly consistent reads when `locking` is off. |
-| `session_lifetime` | `session.gc_maxlifetime` | Seconds until a session expires. |
+| `session_lifetime` | `Session.timeout` minutes | Seconds until a session expires. The default is the timeout that `CakeSession` checks, so a session item expires together with the session; without `Session.timeout`, it is `session.gc_maxlifetime`. |
 | `hash_key` | `id` | Name of the partition key. |
 | `data_attribute` | `data` | Name of the attribute storing the session data. |
 | `session_lifetime_attribute` | `expires` | Name of the attribute storing the expiration time. |
@@ -232,17 +234,36 @@ sessions, does not write the data under a new ID after `session_regenerate_id()`
 `CakeSession::renew()` and `AuthComponent::login()` call) unless the data changes, and relies
 on a default of the DynamoDB API that DynamoDB Local does not apply.
 
-### Removing Expired Sessions
+### Creating the Session Table
 
-PHP's garbage collection does not remove sessions from DynamoDB, so `DynamoDbSession` turns it
-off (`session.gc_probability = 0`). Enable
-[Time to Live](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/TTL.html) on
-the table with the `expires` attribute, and DynamoDB removes the expired sessions:
+Create the table and enable Time to Live with the AWS CLI:
 
 ```bash
+aws dynamodb create-table --table-name DYNAMODB_TABLE_NAME \
+    --attribute-definitions AttributeName=id,AttributeType=S \
+    --key-schema AttributeName=id,KeyType=HASH \
+    --billing-mode PAY_PER_REQUEST
 aws dynamodb update-time-to-live --table-name DYNAMODB_TABLE_NAME \
     --time-to-live-specification "Enabled=true,AttributeName=expires"
 ```
+
+### Removing Expired Sessions
+
+PHP's garbage collection is not used. Expired sessions are removed in two ways instead:
+
+- Each write and close of a session stores its expiration time (the current time plus
+  `session_lifetime`) in the `expires` attribute, and DynamoDB's
+  [Time to Live](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/TTL.html)
+  deletes the item after that time. Time to Live runs in the background and usually deletes
+  expired items within a few days.
+- Until then, reading a session whose `expires` time has passed returns an empty session and
+  deletes the item at once, so an expired session is never used again. This delete is best
+  effort: a failure is logged with the `session` scope and does not interrupt the request, and
+  the data of the expired session is removed when the empty session is written.
+
+`gc()` does nothing, so it never scans the table. Set `session.gc_probability` to `0` as in the
+example above; `DynamoDbSession` also sets it when it is created, because a call to `gc()` would
+not remove anything.
 
 ## DynamoDB Cache Engine
 
