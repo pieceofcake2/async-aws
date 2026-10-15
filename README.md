@@ -18,6 +18,13 @@ It is the AsyncAws counterpart of [pieceofcake2/aws](https://github.com/pieceofc
 which uses the full AWS SDK for PHP. AsyncAws has one package per service and you install only
 those you use, which keeps deployments small, for example on AWS Lambda with [Bref](https://bref.sh).
 
+## Documentation
+
+- Website: https://pieceofcake2.github.io/async-aws/
+- Markdown: [docs/README.md](docs/README.md) (for AI tools and offline reading)
+
+The Markdown documentation is also included in the Composer package, in the plugin's directory: `plugins/AsyncAws/docs/README.md` (the location depends on your `installer-paths`). Install the package with `--dev` if you only need it for development.
+
 ## Requirements
 
 - PHP 8.1+
@@ -44,10 +51,6 @@ composer require pieceofcake2/async-aws async-aws/dynamo-db
 ```
 
 Then load the plugin with `CakePlugin::load('AsyncAws')`.
-
-## Documentation
-
-Documentation: https://pieceofcake2.github.io/async-aws/
 
 ## Contributing
 
