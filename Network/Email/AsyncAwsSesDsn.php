@@ -35,26 +35,38 @@ class AsyncAwsSesDsn
      * Registers the `ses`, `ses+api`, `ses+https`, `ses+smtp` and `ses+smtps` schemes with
      * `CakeEmail::setDsnClassMap()`.
      *
+     * @param callable|null $setDsnClassMap The function that registers the map. Default: `CakeEmail::setDsnClassMap()`.
      * @return bool `false` when the installed pieceofcake2/cakephp has no DSN class map.
      */
-    public static function register(): bool
+    public static function register(?callable $setDsnClassMap = null): bool
     {
         // A callable, not CakeEmail::setDsnClassMap(), so that the plugin also works with releases without it
-        $setDsnClassMap = [CakeEmail::class, 'setDsnClassMap'];
+        $setDsnClassMap = $setDsnClassMap ?? [CakeEmail::class, 'setDsnClassMap'];
         if (!is_callable($setDsnClassMap)) {
             return false;
         }
+        $setDsnClassMap(static::classMap());
+
+        return true;
+    }
+
+    /**
+     * Returns the schemes and their callables.
+     *
+     * @return array<string, callable>
+     */
+    public static function classMap(): array
+    {
         $api = [static::class, 'api'];
         $smtp = [static::class, 'smtp'];
-        $setDsnClassMap([
+
+        return [
             'ses' => $api,
             'ses+api' => $api,
             'ses+https' => $api,
             'ses+smtp' => $smtp,
             'ses+smtps' => $smtp,
-        ]);
-
-        return true;
+        ];
     }
 
     /**
