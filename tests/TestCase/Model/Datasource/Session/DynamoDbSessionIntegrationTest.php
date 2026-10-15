@@ -2,7 +2,10 @@
 
 use AsyncAws\DynamoDb\DynamoDbClient;
 
+App::uses('AsyncAwsComponent', 'AsyncAws.Controller/Component');
+App::uses('ComponentCollection', 'Controller');
 App::uses('DynamoDbSession', 'AsyncAws.Model/Datasource/Session');
+App::uses('SessionHandlerAdapter', 'Model/Datasource/Session');
 
 /**
  * Runs the DynamoDB session handler against DynamoDB Local.
@@ -33,6 +36,7 @@ class DynamoDbSessionIntegrationTest extends CakeTestCase
         ]);
         $this->sessionConfig = (array)Configure::read('Session');
         $this->table = 'sessions_' . bin2hex(random_bytes(4));
+        Configure::write('Session.timeout', 60);
         Configure::write('Session.handler', [
             'engine' => 'AsyncAws.DynamoDbSession',
             'table_name' => $this->table,
@@ -84,7 +88,7 @@ class DynamoDbSessionIntegrationTest extends CakeTestCase
         ])->getItem();
         $this->assertSame('Auth|a:1:{s:2:"id";i:1;}', $item['data']->getS());
         $this->assertArrayNotHasKey('lock', $item);
-        $this->assertEqualsWithDelta(time() + (int)ini_get('session.gc_maxlifetime'), (int)$item['expires']->getN(), 5);
+        $this->assertEqualsWithDelta(time() + 3600, (int)$item['expires']->getN(), 5);
 
         $this->assertTrue($session->destroy('abc'));
         $this->assertSame('', $this->openSession()->read('abc'));
@@ -109,6 +113,30 @@ class DynamoDbSessionIntegrationTest extends CakeTestCase
         ])->getItem());
     }
 
+    public function testExpiredSessionIsNotRenewedWithItsData(): void
+    {
+        $this->client->putItem([
+            'TableName' => $this->table,
+            'Item' => [
+                'id' => ['S' => session_name() . '_old'],
+                'data' => ['S' => 'stale'],
+                'expires' => ['N' => (string)(time() - 10)],
+            ],
+        ])->resolve();
+
+        $session = $this->openSession();
+        $this->assertSame('', $session->read('old'));
+        $this->assertTrue($session->write('old', ''));
+
+        $item = $this->client->getItem([
+            'TableName' => $this->table,
+            'Key' => ['id' => ['S' => session_name() . '_old']],
+            'ConsistentRead' => true,
+        ])->getItem();
+        $this->assertArrayNotHasKey('data', $item);
+        $this->assertSame('', $this->openSession()->read('old'));
+    }
+
     public function testRegeneratedIdKeepsData(): void
     {
         $session = $this->openSession();
@@ -121,6 +149,62 @@ class DynamoDbSessionIntegrationTest extends CakeTestCase
 
         $this->assertSame('data', $this->openSession(['locking' => false])->read('new'));
         $this->assertSame('', $this->openSession(['locking' => false])->read('old'));
+    }
+
+    public function testSessionRegenerateIdKeepsData(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $this->markTestSkipped('A session is already active.');
+        }
+        $ini = [
+            'session.use_cookies' => '0',
+            'session.use_only_cookies' => '0',
+            'session.use_strict_mode' => '0',
+            'session.cache_limiter' => '',
+        ];
+        $before = [];
+        foreach ($ini as $key => $value) {
+            $before[$key] = (string)ini_get($key);
+            ini_set($key, $value);
+        }
+        $name = session_name();
+
+        try {
+            session_set_save_handler(new SessionHandlerAdapter(new DynamoDbSession()), false);
+            session_name('DYNAMODB_TEST');
+            session_id('regenerate0test0session0id00001');
+            $this->assertTrue(session_start());
+            $_SESSION['Auth'] = ['id' => 1];
+            session_write_close();
+
+            $this->assertTrue(session_start());
+            $this->assertSame(['id' => 1], $_SESSION['Auth']);
+            $this->assertTrue(session_regenerate_id(true));
+            $newId = session_id();
+            session_write_close();
+
+            $this->assertNotSame('regenerate0test0session0id00001', $newId);
+            $this->assertSame([], $this->client->getItem([
+                'TableName' => $this->table,
+                'Key' => ['id' => ['S' => 'DYNAMODB_TEST_regenerate0test0session0id00001']],
+                'ConsistentRead' => true,
+            ])->getItem());
+
+            $_SESSION = [];
+            session_id($newId);
+            $this->assertTrue(session_start());
+            $this->assertSame(['id' => 1], $_SESSION['Auth']);
+            session_write_close();
+        } finally {
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_abort();
+            }
+            $_SESSION = [];
+            session_name($name);
+            foreach ($before as $key => $value) {
+                ini_set($key, $value);
+            }
+        }
     }
 
     public function testLockIsHeldUntilWrite(): void

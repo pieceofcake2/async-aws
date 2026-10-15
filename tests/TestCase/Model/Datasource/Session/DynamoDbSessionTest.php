@@ -3,7 +3,26 @@
 use AsyncAws\Core\Credentials\NullProvider;
 use AsyncAws\DynamoDb\DynamoDbClient;
 
+App::uses('CakeLog', 'Log');
+App::uses('CakeLogInterface', 'Log');
 App::uses('DynamoDbSession', 'AsyncAws.Model/Datasource/Session');
+
+/**
+ * Collects the log messages written during a test.
+ */
+class DynamoDbSessionTestLog implements CakeLogInterface
+{
+    public static array $messages = [];
+
+    public function __construct($config = [])
+    {
+    }
+
+    public function write($type, $message): void
+    {
+        static::$messages[] = $type . ': ' . $message;
+    }
+}
 
 class DynamoDbSessionTest extends CakeTestCase
 {
@@ -11,16 +30,31 @@ class DynamoDbSessionTest extends CakeTestCase
 
     private array $sessionConfig;
 
+    private array $disabledLogs = [];
+
     public function setUp(): void
     {
         parent::setUp();
         $this->sessionConfig = (array)Configure::read('Session');
         $this->mockAsyncAws();
         Configure::write('Session.handler', ['engine' => 'AsyncAws.DynamoDbSession', 'table_name' => 'sessions']);
+
+        foreach (CakeLog::configured() as $stream) {
+            if (CakeLog::enabled($stream)) {
+                CakeLog::disable($stream);
+                $this->disabledLogs[] = $stream;
+            }
+        }
+        DynamoDbSessionTestLog::$messages = [];
+        CakeLog::config('dynamodb_session_test', ['engine' => 'DynamoDbSessionTestLog', 'scopes' => ['session']]);
     }
 
     public function tearDown(): void
     {
+        CakeLog::drop('dynamodb_session_test');
+        foreach ($this->disabledLogs as $stream) {
+            CakeLog::enable($stream);
+        }
         Configure::delete('AsyncAws');
         Configure::write('Session', $this->sessionConfig);
         parent::tearDown();
@@ -183,11 +217,85 @@ class DynamoDbSessionTest extends CakeTestCase
 
     public function testReadExpired(): void
     {
-        $this->queueJson(['Attributes' => $this->item('serialized', time() - 60)], []);
+        $expires = time() - 60;
+        $this->queueJson(['Attributes' => $this->item('serialized', $expires)], []);
 
         $this->assertSame('', $this->openSession()->read('abc'));
         $this->assertSame('DeleteItem', $this->operation());
-        $this->assertSame($this->key('abc'), $this->payload()['Key']);
+        $payload = $this->payload();
+        $this->assertSame($this->key('abc'), $payload['Key']);
+        $this->assertSame('#expires = :expires', $payload['ConditionExpression']);
+        $this->assertSame(['#expires' => 'expires'], $payload['ExpressionAttributeNames']);
+        $this->assertSame([':expires' => ['N' => (string)$expires]], $payload['ExpressionAttributeValues']);
+        $this->assertSame([], DynamoDbSessionTestLog::$messages);
+    }
+
+    public function testReadExpiresWhenTheExpirationTimeIsReached(): void
+    {
+        $this->queueJson(['Attributes' => $this->item('serialized', time())], []);
+
+        $this->assertSame('', $this->openSession()->read('abc'));
+        $this->assertSame('DeleteItem', $this->operation());
+    }
+
+    public function testReadExpiredWithoutData(): void
+    {
+        $this->queueJson(['Attributes' => ['expires' => ['N' => (string)(time() - 60)]]], []);
+
+        $this->assertSame('', $this->openSession()->read('abc'));
+        $this->assertSame('DeleteItem', $this->operation());
+    }
+
+    public function testReadExpiredDeleteFailureIsLogged(): void
+    {
+        $this->queueJson(['Attributes' => $this->item('serialized', time() - 60)]);
+        $this->queueError('AccessDeniedException');
+        $session = $this->openSession();
+
+        $warnings = $this->captureWarnings(fn() => $this->assertSame('', $session->read('abc')));
+
+        $this->assertSame([], $warnings);
+        $this->assertCount(1, DynamoDbSessionTestLog::$messages);
+        $this->assertStringContainsString('warning: DynamoDB session could not delete expired session "' . session_name() . '_abc" from table "sessions"', DynamoDbSessionTestLog::$messages[0]);
+        $this->assertStringContainsString('AccessDeniedException message', DynamoDbSessionTestLog::$messages[0]);
+    }
+
+    public function testReadExpiredRenewedByAnotherRequestIsNotLogged(): void
+    {
+        $this->queueJson(['Attributes' => $this->item('serialized', time() - 60)]);
+        $this->queueError('ConditionalCheckFailedException');
+
+        $this->assertSame('', $this->openSession()->read('abc'));
+        $this->assertSame([], DynamoDbSessionTestLog::$messages);
+    }
+
+    public function testWriteAfterExpiredReadReplacesTheData(): void
+    {
+        $this->queueJson(['Attributes' => $this->item('serialized', time() - 60)]);
+        $this->queueError('AccessDeniedException');
+        $this->queueJson([]);
+        $session = $this->openSession();
+        $this->assertSame('', $session->read('abc'));
+
+        // PHP writes the empty session; the old data must not be kept with a new expiration time.
+        $this->assertTrue($session->write('abc', ''));
+
+        $payload = $this->payload();
+        $this->assertSame('UpdateItem', $this->operation());
+        $this->assertSame(['Action' => 'DELETE'], $payload['AttributeUpdates']['data']);
+        $this->assertArrayHasKey('expires', $payload['AttributeUpdates']);
+    }
+
+    public function testCloseAfterExpiredReadReplacesTheData(): void
+    {
+        $this->queueJson(['Attributes' => $this->item('serialized', time() - 60)], [], []);
+        $session = $this->openSession();
+        $this->assertSame('', $session->read((string)session_id()));
+
+        $this->assertTrue($session->close());
+
+        $this->assertSame('UpdateItem', $this->operation());
+        $this->assertSame(['Action' => 'DELETE'], $this->payload()['AttributeUpdates']['data']);
     }
 
     public function testReadFailure(): void
@@ -209,13 +317,41 @@ class DynamoDbSessionTest extends CakeTestCase
         $this->assertSame($this->key('abc'), $payload['Key']);
         $this->assertSame(['Value' => ['S' => 'serialized'], 'Action' => 'PUT'], $payload['AttributeUpdates']['data']);
         $this->assertSame(['Action' => 'DELETE'], $payload['AttributeUpdates']['lock']);
-        $expires = (int)$payload['AttributeUpdates']['expires']['Value']['N'];
-        $this->assertEqualsWithDelta(time() + (int)ini_get('session.gc_maxlifetime'), $expires, 5);
+    }
+
+    public function testWriteSetsExpiresFromSessionTimeout(): void
+    {
+        Configure::write('Session.timeout', 30);
+        $this->queueJson([]);
+
+        $this->assertTrue($this->openSession()->write('abc', 'serialized'));
+
+        $expires = (int)$this->payload()['AttributeUpdates']['expires']['Value']['N'];
+        $this->assertEqualsWithDelta(time() + 1800, $expires, 5);
+    }
+
+    public function testWriteSetsExpiresFromGcMaxlifetimeWithoutSessionTimeout(): void
+    {
+        Configure::delete('Session.timeout');
+        $before = ini_get('session.gc_maxlifetime');
+        ini_set('session.gc_maxlifetime', '600');
+        try {
+            $session = $this->openSession();
+        } finally {
+            ini_set('session.gc_maxlifetime', (string)$before);
+        }
+        $this->queueJson([]);
+
+        $this->assertTrue($session->write('abc', 'serialized'));
+
+        $expires = (int)$this->payload()['AttributeUpdates']['expires']['Value']['N'];
+        $this->assertEqualsWithDelta(time() + 600, $expires, 5);
     }
 
     public function testWriteWithSessionLifetimeAndAttributeNames(): void
     {
         $this->queueJson([]);
+        Configure::write('Session.timeout', 30);
         $session = $this->openSession([
             'session_lifetime' => 259200,
             'hash_key' => 'pk',

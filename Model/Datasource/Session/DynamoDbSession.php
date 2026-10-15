@@ -8,6 +8,7 @@ App::uses('CakeSessionHandlerInterface', 'Model/Datasource/Session');
 App::uses('ComponentCollection', 'Controller');
 App::uses('AsyncAwsComponent', 'AsyncAws.Controller/Component');
 App::uses('CakeException', 'Error');
+App::uses('CakeLog', 'Log');
 App::uses('MissingPackageException', 'AsyncAws.Error');
 
 /**
@@ -23,14 +24,20 @@ App::uses('MissingPackageException', 'AsyncAws.Error');
  *
  *  - `locking` = Lock the session while a request uses it (default: true)
  *  - `consistent_read` = Use strongly consistent reads when not locking (default: true)
- *  - `session_lifetime` = Seconds until a session expires (default: `session.gc_maxlifetime`)
+ *  - `session_lifetime` = Seconds until a session expires (default: `Session.timeout` minutes, the timeout
+ *    CakeSession checks, or `session.gc_maxlifetime` when `Session.timeout` is not set)
  *  - `hash_key`, `data_attribute`, `session_lifetime_attribute` = Attribute names
  *  - `max_lock_wait_time` = Seconds to wait for a lock (default: 10)
  *  - `min_lock_retry_microtime`, `max_lock_retry_microtime` = Microseconds between attempts to get a lock (default: 10000 and 50000)
  *
- * Expired sessions are not removed by PHP's garbage collection; enable Time to Live on the table with the
- * `expires` attribute so that DynamoDB removes them. This handler turns off PHP's garbage collection
- * (`session.gc_probability = 0`) because it would never remove anything.
+ * Each write stores the expiration time in the `expires` attribute: the current time plus `session_lifetime`.
+ * Expired sessions are removed without PHP's garbage collection:
+ *
+ *  - DynamoDB's Time to Live removes them; enable it on the table with the `expires` attribute.
+ *  - Time to Live can take a few days, so `read()` treats an expired session as empty and deletes it at once
+ *    (best effort: a failure is logged with the `session` scope).
+ *  - `gc()` does nothing; it never scans the table. This handler turns off PHP's garbage collection
+ *    (`session.gc_probability = 0`) because it would never remove anything.
  *
  * Requires `async-aws/dynamo-db`.
  */
@@ -61,6 +68,13 @@ class DynamoDbSession implements CakeSessionHandlerInterface
     private bool $sessionWritten = false;
 
     /**
+     * Whether the last read found an expired session, whose data must be replaced by the next write.
+     *
+     * @var bool
+     */
+    private bool $expiredRead = false;
+
+    /**
      * Constructor
      *
      * @param \AsyncAws\DynamoDb\DynamoDbClient|null $client DynamoDB client. Default: a client created with the plugin configuration.
@@ -87,6 +101,7 @@ class DynamoDbSession implements CakeSessionHandlerInterface
             'min_lock_retry_microtime' => 10000,
             'max_lock_retry_microtime' => 50000,
         ];
+        $this->options['session_lifetime'] ??= static::defaultSessionLifetime();
 
         $this->client = $client ?? (new AsyncAwsComponent(new ComponentCollection()))->createDynamoDb();
 
@@ -104,6 +119,22 @@ class DynamoDbSession implements CakeSessionHandlerInterface
     protected static function clientClass(): string
     {
         return DynamoDbClient::class;
+    }
+
+    /**
+     * Returns the default session lifetime in seconds: `Session.timeout` minutes, the timeout that CakeSession
+     * checks, or `session.gc_maxlifetime` when `Session.timeout` is not set.
+     *
+     * @return int
+     */
+    protected static function defaultSessionLifetime(): int
+    {
+        $timeout = Configure::read('Session.timeout');
+        if (is_numeric($timeout) && $timeout > 0) {
+            return (int)round($timeout * 60);
+        }
+
+        return (int)ini_get('session.gc_maxlifetime');
     }
 
     /**
@@ -139,7 +170,7 @@ class DynamoDbSession implements CakeSessionHandlerInterface
     {
         $id = (string)session_id();
         if ($this->openSessionId !== $id || !$this->sessionWritten) {
-            $this->sessionWritten = $this->update($id, '', false);
+            $this->sessionWritten = $this->update($id, '', $this->expiredRead && $this->openSessionId === $id);
         }
 
         return $this->sessionWritten;
@@ -156,17 +187,17 @@ class DynamoDbSession implements CakeSessionHandlerInterface
         $id = (string)$id;
         $this->openSessionId = $id;
         $this->dataRead = '';
+        $this->expiredRead = false;
 
         $item = $this->options['locking'] ? $this->lockAndGet($id) : $this->get($id);
 
         $data = $item[$this->options['data_attribute']] ?? null;
         $expires = $item[$this->options['session_lifetime_attribute']] ?? null;
-        if ($data !== null && $expires !== null) {
+        if ($expires !== null && (int)$expires->getN() <= time()) {
+            $this->expiredRead = true;
+            $this->deleteExpired($id, (string)$expires->getN());
+        } elseif ($data !== null && $expires !== null) {
             $this->dataRead = (string)($data->getS() ?? $data->getB());
-            if ((int)$expires->getN() <= time()) {
-                $this->dataRead = '';
-                $this->destroy($id);
-            }
         }
 
         return $this->dataRead;
@@ -183,8 +214,11 @@ class DynamoDbSession implements CakeSessionHandlerInterface
     {
         $id = (string)$id;
         $data = (string)$data;
-        $changed = $id !== $this->openSessionId || $data !== $this->dataRead;
+        // After an expired read, the data is always written so that an expired session that could not be deleted
+        // is not renewed with its old data.
+        $changed = $id !== $this->openSessionId || $data !== $this->dataRead || $this->expiredRead;
         $this->openSessionId = $id;
+        $this->expiredRead = false;
 
         return $this->sessionWritten = $this->update($id, $data, $changed);
     }
@@ -199,6 +233,7 @@ class DynamoDbSession implements CakeSessionHandlerInterface
     {
         $id = (string)$id;
         $this->openSessionId = $id;
+        $this->expiredRead = false;
 
         try {
             $this->client->deleteItem([
@@ -223,6 +258,35 @@ class DynamoDbSession implements CakeSessionHandlerInterface
     public function gc($expires = null): bool
     {
         return true;
+    }
+
+    /**
+     * Deletes an expired item unless another request renewed it. Failures are logged, not raised.
+     *
+     * @param string $id Session ID
+     * @param string $expires Expiration time read from the item
+     * @return void
+     */
+    private function deleteExpired(string $id, string $expires): void
+    {
+        try {
+            $this->client->deleteItem([
+                'TableName' => $this->options['table_name'],
+                'Key' => $this->key($id),
+                'ConditionExpression' => '#expires = :expires',
+                'ExpressionAttributeNames' => ['#expires' => $this->options['session_lifetime_attribute']],
+                'ExpressionAttributeValues' => [':expires' => ['N' => $expires]],
+            ])->resolve();
+        } catch (ConditionalCheckFailedException) {
+            // Another request renewed the session.
+        } catch (AsyncAwsException $e) {
+            CakeLog::write(LOG_WARNING, sprintf(
+                'DynamoDB session could not delete expired session "%s" from table "%s": %s',
+                $this->key($id)[$this->options['hash_key']]['S'],
+                $this->options['table_name'],
+                $e->getMessage(),
+            ), ['session']);
+        }
     }
 
     /**
