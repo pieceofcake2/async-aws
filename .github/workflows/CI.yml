@@ -121,6 +121,34 @@ jobs:
           oidc: true
           command: complete
 
+  minimal-install:
+    name: Minimal install
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Keep async-aws/dynamo-db as the only service package
+        run: composer remove --dev --no-interaction --no-progress async-aws/ses async-aws/simple-s3 async-aws/s3
+
+      - name: Make temporary directories writable
+        run: |
+          chmod -R 777 ./vendor/pieceofcake2/app/tmp
+          chmod -R 777 ./vendor/pieceofcake2/app/logs
+
+      - name: Run the minimal install tests
+        run: ./vendor/bin/phpunit --colors=always --fail-on-skipped tests/TestCase/MinimalInstallTest.php
+
   phpcs:
     runs-on: ubuntu-latest
 

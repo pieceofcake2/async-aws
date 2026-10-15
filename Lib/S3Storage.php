@@ -4,6 +4,7 @@ use AsyncAws\SimpleS3\SimpleS3Client;
 
 App::uses('ComponentCollection', 'Controller');
 App::uses('AsyncAwsComponent', 'AsyncAws.Controller/Component');
+App::uses('MissingPackageException', 'AsyncAws.Error');
 
 /**
  * S3 storage helper
@@ -11,6 +12,7 @@ App::uses('AsyncAwsComponent', 'AsyncAws.Controller/Component');
  * A few file-like operations on S3 objects with `async-aws/simple-s3`. AsyncAws has no S3 stream wrapper,
  * so `s3://` paths cannot be used with PHP's file functions; this class takes the same `s3://bucket/key`
  * paths (or a bucket and a key) to make the switch from the stream wrapper of pieceofcake2/aws easy.
+ * Requires `async-aws/simple-s3`.
  *
  * ```
  * $storage = new S3Storage();
@@ -26,10 +28,22 @@ class S3Storage
      * Constructor
      *
      * @param \AsyncAws\SimpleS3\SimpleS3Client|null $client S3 client. Default: a client created with the plugin configuration.
+     * @throws \MissingPackageException When async-aws/simple-s3 is not installed.
      */
     public function __construct(?SimpleS3Client $client = null)
     {
+        MissingPackageException::check(static::clientClass(), 'async-aws/simple-s3', 'S3Storage');
         $this->client = $client ?? (new AsyncAwsComponent(new ComponentCollection()))->createSimpleS3();
+    }
+
+    /**
+     * Returns the class of the SimpleS3 client, which is checked to exist before the client is created.
+     *
+     * @return string
+     */
+    protected static function clientClass(): string
+    {
+        return SimpleS3Client::class;
     }
 
     /**

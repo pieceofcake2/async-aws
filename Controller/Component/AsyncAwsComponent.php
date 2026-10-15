@@ -3,12 +3,16 @@
 use AsyncAws\Core\AwsClientFactory;
 use AsyncAws\Core\Configuration;
 use AsyncAws\Core\Credentials\CredentialProvider;
+use AsyncAws\DynamoDb\DynamoDbClient;
+use AsyncAws\S3\S3Client;
+use AsyncAws\Ses\SesClient;
 use AsyncAws\SimpleS3\SimpleS3Client;
 use Psr\Log\LoggerInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 App::uses('Component', 'Controller');
 App::uses('Configure', 'Core');
+App::uses('MissingPackageException', 'AsyncAws.Error');
 
 /**
  * AsyncAws Component
@@ -25,6 +29,9 @@ App::uses('Configure', 'Core');
  *
  * When no credentials are configured, AsyncAws uses its default credential chain: environment variables,
  * web identity token, shared configuration files, ECS container credentials and EC2 instance metadata.
+ *
+ * Each service needs its AsyncAws package (`async-aws/s3`, `async-aws/dynamo-db`, ...). Getting the client of a
+ * service whose package is not installed throws a `MissingPackageException`.
  *
  * @method \AsyncAws\DynamoDb\DynamoDbClient dynamoDb()
  * @method \AsyncAws\S3\S3Client s3()
@@ -57,6 +64,18 @@ class AsyncAwsComponent extends Component
      */
     private const OPTION_NAMES = [
         'use_path_style_endpoint' => Configuration::OPTION_PATH_STYLE_ENDPOINT,
+    ];
+
+    /**
+     * Client classes and packages of the services used by the plugin, by `AwsClientFactory` method.
+     *
+     * @var array<string, array{0: string, 1: string}>
+     */
+    private const PACKAGES = [
+        'dynamoDb' => [DynamoDbClient::class, 'async-aws/dynamo-db'],
+        's3' => [S3Client::class, 'async-aws/s3'],
+        'ses' => [SesClient::class, 'async-aws/ses'],
+        'simpleS3' => [SimpleS3Client::class, 'async-aws/simple-s3'],
     ];
 
     private AwsClientFactory $factory;
@@ -176,6 +195,8 @@ class AsyncAwsComponent extends Component
      */
     public function createSimpleS3(array $args = []): SimpleS3Client
     {
+        static::checkPackage('simpleS3');
+
         return new SimpleS3Client(...static::clientArguments($args));
     }
 
@@ -191,7 +212,10 @@ class AsyncAwsComponent extends Component
             return $this->createSimpleS3();
         }
 
-        return $this->factory->{static::serviceMethod($name)}();
+        $method = static::serviceMethod($name);
+        static::checkPackage($method);
+
+        return $this->factory->$method();
     }
 
     /**
@@ -206,9 +230,12 @@ class AsyncAwsComponent extends Component
     {
         if (str_starts_with($name, 'create') && strlen($name) > 6) {
             $method = static::serviceMethod(substr($name, 6));
+            static::checkPackage($method);
 
             return static::createFactory($arguments[0] ?? [])->$method();
         }
+
+        static::checkPackage($name);
 
         return $this->factory->$name(...$arguments);
     }
@@ -228,5 +255,35 @@ class AsyncAwsComponent extends Component
         }
 
         return $method;
+    }
+
+    /**
+     * Returns the client classes and packages of the services used by the plugin, by `AwsClientFactory` method.
+     *
+     * @return array<string, array{0: string, 1: string}>
+     */
+    protected static function packages(): array
+    {
+        return self::PACKAGES;
+    }
+
+    /**
+     * Checks that the AsyncAws package of a service is installed.
+     *
+     * The factory of `async-aws/core` also checks it for every service; this check gives the same message as the
+     * other features of the plugin for the services that the plugin uses.
+     *
+     * @param string $method `AwsClientFactory` method of the service, e.g. `dynamoDb`, or `simpleS3`.
+     * @return void
+     * @throws \MissingPackageException When the package is not installed.
+     */
+    protected static function checkPackage(string $method): void
+    {
+        $packages = static::packages();
+        if (!isset($packages[$method])) {
+            return;
+        }
+        [$class, $package] = $packages[$method];
+        MissingPackageException::check($class, $package, sprintf('The %s client', ucfirst($method)));
     }
 }
