@@ -1,6 +1,6 @@
 {
     "name": "pieceofcake2/async-aws",
-    "description": "AsyncAws integration for CakePHP 2: DynamoDB session handler and cache, Amazon SES email transport, S3 helper.",
+    "description": "AsyncAws integration for CakePHP 2: DynamoDB session handler and cache, Amazon SES email transport, S3 helper",
     "type": "cakephp-plugin",
     "keywords": ["cakephp", "cakephp2", "aws", "async-aws", "s3", "dynamodb", "ses"],
     "license": "MIT",
