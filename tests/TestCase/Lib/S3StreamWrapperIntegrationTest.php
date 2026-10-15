@@ -1,6 +1,7 @@
 <?php
 
 use AsyncAws\SimpleS3\SimpleS3Client;
+use Composer\InstalledVersions;
 
 App::uses('File', 'Utility');
 App::uses('Folder', 'Utility');
@@ -346,7 +347,10 @@ class S3StreamWrapperIntegrationTest extends CakeTestCase
 
         $head = $this->client->headObject(['Bucket' => $this->bucket, 'Key' => 'large.bin']);
         $this->assertSame($size, $head->getContentLength());
-        $this->assertStringEndsWith('-3"', (string)$head->getETag(), 'The object was uploaded in 3 parts.');
+        if (version_compare((string)InstalledVersions::getVersion('async-aws/simple-s3'), '3.0.0', '>=')) {
+            // async-aws/simple-s3 2.x uploads bodies up to 64 MB with PutObject, whatever the PartSize.
+            $this->assertStringEndsWith('-3"', (string)$head->getETag(), 'The object was uploaded in 3 parts.');
+        }
 
         $hash = hash_init('sha256');
         $handle = fopen($this->path('large.bin'), 'r');

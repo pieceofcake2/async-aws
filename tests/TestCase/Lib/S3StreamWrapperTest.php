@@ -2,6 +2,7 @@
 
 use AsyncAws\S3\S3Client;
 use AsyncAws\SimpleS3\SimpleS3Client;
+use Composer\InstalledVersions;
 use Symfony\Component\HttpClient\Response\MockResponse;
 
 App::uses('CakeLog', 'Log');
@@ -310,6 +311,9 @@ class S3StreamWrapperTest extends CakeTestCase
 
     public function testMultipartUpload(): void
     {
+        if (version_compare((string)InstalledVersions::getVersion('async-aws/simple-s3'), '3.0.0', '<')) {
+            $this->markTestSkipped('async-aws/simple-s3 2.x (PHP 8.1) uploads bodies up to 64 MB with PutObject, whatever the PartSize.');
+        }
         $this->queue(
             $this->ok('<?xml version="1.0" encoding="UTF-8"?><InitiateMultipartUploadResult><Bucket>bucket</Bucket><Key>big.bin</Key><UploadId>upload-id</UploadId></InitiateMultipartUploadResult>'),
             $this->ok('', ['etag' => '"etag1"']),
@@ -923,5 +927,74 @@ class S3StreamWrapperTest extends CakeTestCase
             'HTTP 403 returned for "https://b.s3.amazonaws.com/k?X-Amz-Credential=***&X-Amz-Signature=***&X-Amz-Security-Token=***".',
             $wrapper::clean('HTTP 403 returned for "https://b.s3.amazonaws.com/k?X-Amz-Credential=AKIA%2F20260101&X-Amz-Signature=abc&X-Amz-Security-Token=tok".'),
         );
+    }
+
+    public function testWriteStreamEofAndRead(): void
+    {
+        $handle = fopen('s3://bucket/file.txt', 'w');
+        fwrite($handle, 'abc');
+        $this->assertFalse(feof($handle));
+        fseek($handle, 0);
+        $this->assertSame('abc', fread($handle, 10));
+        fclose($handle);
+    }
+
+    public function testSeekableReadWithoutContentLength(): void
+    {
+        $this->queue(new MockResponse((function () {
+            yield 'abc';
+            yield 'def';
+        })()));
+        $wrapper = new S3StreamWrapper();
+        $wrapper->context = stream_context_create(['s3' => ['seekable' => true]]);
+        $openedPath = null;
+
+        $this->assertTrue($wrapper->stream_open('s3://bucket/file.txt', 'r', 0, $openedPath));
+        $this->assertTrue($wrapper->stream_seek(-2, SEEK_END));
+        $this->assertSame('ef', $wrapper->stream_read(10));
+        $this->assertTrue($wrapper->stream_seek(-4, SEEK_CUR));
+        $this->assertSame(2, $wrapper->stream_tell());
+        $this->assertSame('cd', $wrapper->stream_read(2));
+        $this->assertFalse($wrapper->stream_cast(STREAM_CAST_AS_STREAM));
+        $wrapper->stream_close();
+    }
+
+    public function testReaddirWithoutOpendir(): void
+    {
+        $this->assertFalse((new S3StreamWrapper())->dir_readdir());
+    }
+
+    public function testExclusiveCreateWhenAccessIsDenied(): void
+    {
+        // As the AWS SDK, a forbidden object is treated as existing.
+        $this->queue($this->error(403));
+
+        $this->assertFalse($this->quietly(fn() => fopen('s3://bucket/new.txt', 'x')));
+        $this->assertStringContainsString('already exists on Amazon S3', $this->warnings[0]);
+    }
+
+    public function testExclusiveCreateServerError(): void
+    {
+        $this->queue($this->error(500));
+
+        $this->assertFalse($this->quietly(fn() => fopen('s3://bucket/new.txt', 'x')));
+        $this->assertStringContainsString('HTTP 500', $this->warnings[0]);
+    }
+
+    public function testStatCacheIsLimited(): void
+    {
+        $keys = [];
+        for ($i = 0; $i <= S3StreamWrapper::CACHE_SIZE; $i++) {
+            $keys[] = sprintf('%04d.txt', $i);
+        }
+        $this->queue($this->listing($keys), $this->head(7));
+
+        $this->assertCount(S3StreamWrapper::CACHE_SIZE + 1, scandir('s3://bucket'));
+
+        // The first entry was removed from the cache, the last one is still there.
+        $this->assertSame(3, filesize('s3://bucket/1000.txt'));
+        $this->assertCount(1, $this->requests);
+        $this->assertSame(7, filesize('s3://bucket/0000.txt'));
+        $this->assertCount(2, $this->requests);
     }
 }

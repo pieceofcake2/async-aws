@@ -422,7 +422,7 @@ uses those it knows: for example `VersionId` or `Range` for reading, and `Versio
 | `seekable` | `true` makes a read stream seekable (see below). |
 | `delimiter` | Delimiter of `opendir()`/`scandir()`. Default: `/`. An empty string lists all the keys under the prefix. |
 | `listFilter` | A callable for `opendir()` that receives each entry (`Key`, `Size`, `LastModified`, ... or `Prefix`) and returns whether to list it. |
-| `PartSize` | Part size of multipart uploads, in MB (default: 64). |
+| `PartSize` | Part size of multipart uploads, in MB (default: 64). With `async-aws/simple-s3` 3.x, bodies larger than one part are uploaded in parts; 2.x (installed on PHP 8.1) uploads bodies up to 64 MB with PutObject whatever the part size. |
 
 These functions are supported:
 
