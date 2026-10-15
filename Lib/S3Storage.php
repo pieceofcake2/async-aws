@@ -9,9 +9,8 @@ App::uses('MissingPackageException', 'AsyncAws.Error');
 /**
  * S3 storage helper
  *
- * A few file-like operations on S3 objects with `async-aws/simple-s3`. AsyncAws has no S3 stream wrapper,
- * so `s3://` paths cannot be used with PHP's file functions; this class takes the same `s3://bucket/key`
- * paths (or a bucket and a key) to make the switch from the stream wrapper of pieceofcake2/aws easy.
+ * A few file-like operations on S3 objects with `async-aws/simple-s3`, with the same `s3://bucket/key` paths
+ * as the stream wrapper (`S3StreamWrapper`), but with methods that throw exceptions on errors.
  * Requires `async-aws/simple-s3`.
  *
  * ```

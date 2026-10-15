@@ -7,6 +7,7 @@
     <arg name="colors"/>
     <arg name="parallel" value="16"/>
 
+    <file>./Config</file>
     <file>./Controller</file>
     <file>./Lib</file>
     <file>./Model</file>
@@ -74,6 +75,8 @@
         <exclude-pattern>Controller/*</exclude-pattern>
         <exclude-pattern>Console/Command/*</exclude-pattern>
         <exclude-pattern>Model/Behavior/*</exclude-pattern>
+        <!-- PHP calls the methods of stream wrappers by fixed names (stream_open, url_stat, ...) -->
+        <exclude-pattern>Lib/S3StreamWrapper.php</exclude-pattern>
     </rule>
 
     <!-- Require return type hints for tests/TestCase only -->

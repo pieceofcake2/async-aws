@@ -11,7 +11,8 @@
 The AsyncAws plugin integrates [AsyncAws](https://async-aws.com) with CakePHP 2 applications
 running on [pieceofcake2/cakephp](https://github.com/pieceofcake2/cakephp): an `AsyncAws`
 component that creates AsyncAws clients, a DynamoDB session handler, a DynamoDB cache engine,
-an Amazon SES email transport and a small S3 storage helper.
+an Amazon SES email transport, an S3 stream wrapper (`s3://` paths with PHP's file functions)
+and a small S3 storage helper.
 
 It is the AsyncAws counterpart of [pieceofcake2/aws](https://github.com/pieceofcake2/aws),
 which uses the full AWS SDK for PHP. AsyncAws has one package per service and you install only
@@ -34,7 +35,7 @@ The plugin requires only `async-aws/core`. Install the AsyncAws package of each 
 | --- | --- |
 | DynamoDB session handler, DynamoDB cache engine | `async-aws/dynamo-db` |
 | Amazon SES email transport | `async-aws/ses` |
-| S3 storage helper | `async-aws/simple-s3` |
+| S3 stream wrapper, S3 storage helper | `async-aws/simple-s3` |
 
 For example, for sessions in DynamoDB only:
 

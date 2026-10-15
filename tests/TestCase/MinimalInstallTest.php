@@ -6,6 +6,7 @@ App::uses('DynamoDbSession', 'AsyncAws.Model/Datasource/Session');
 App::uses('AmazonSesApiTransport', 'AsyncAws.Network/Email');
 App::uses('MissingPackageException', 'AsyncAws.Error');
 App::uses('S3Storage', 'AsyncAws.Lib');
+App::uses('S3StreamWrapper', 'AsyncAws.Lib');
 
 /**
  * Tests an installation with async-aws/dynamo-db as the only service package, as the "Minimal install" CI job does:
@@ -68,5 +69,11 @@ class MinimalInstallTest extends CakeTestCase
         $this->expectException(MissingPackageException::class);
         $this->expectExceptionMessage('The Amazon SES email transport requires async-aws/ses. Install it with: composer require async-aws/ses');
         new AmazonSesApiTransport();
+    }
+
+    public function testStreamWrapperIsNotRegistered(): void
+    {
+        $this->assertFalse(S3StreamWrapper::bootstrap());
+        $this->assertNotContains('s3', stream_get_wrappers());
     }
 }
