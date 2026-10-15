@@ -15,10 +15,10 @@
         "async-aws/s3": "^2.0 || ^3.0",
         "async-aws/ses": "^1.13",
         "async-aws/simple-s3": "^2.1 || ^3.0",
-        "cakephp/cakephp-codesniffer": "^5.0",
         "phpstan/phpstan": "^2.1",
         "phpunit/phpunit": "^9.6",
         "pieceofcake2/app": "^2.2",
+        "pieceofcake2/phpcs-cakephp2": "^1.0",
         "pieceofcake2/phpstan-cakephp2": "^0.2.3"
     },
     "suggest": {
