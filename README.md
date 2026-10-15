@@ -21,7 +21,7 @@ those you use, which keeps deployments small, for example on AWS Lambda with [Br
 ## Documentation
 
 - Website: https://pieceofcake2.github.io/async-aws/
-- Markdown: [docs/README.md](docs/README.md) (for AI tools and offline reading)
+- Markdown: [docs/README.md](docs/README.md) and the pages it links (for AI tools and offline reading)
 
 The Markdown documentation is also included in the Composer package, in the plugin's directory: `plugins/AsyncAws/docs/README.md` (the location depends on your `installer-paths`). Install the package with `--dev` if you only need it for development.
 
