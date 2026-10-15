@@ -629,3 +629,8 @@ Configure::write('AsyncAws', [
 To test your own code that calls an AsyncAws client, you can also mock the client and create
 its results with `AsyncAws\Core\Test\ResultMockFactory`; see
 [Writing tests and mocking](https://async-aws.com/features/tests.html).
+
+## Origin
+
+This package was created by [pieceofcake2](https://github.com/pieceofcake2), which also maintains
+it. It is not a fork of another project and is not based on one.
