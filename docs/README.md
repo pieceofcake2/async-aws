@@ -4,7 +4,7 @@ The AsyncAws plugin integrates [AsyncAws](https://async-aws.com) with CakePHP 2 
 running on [pieceofcake2/cakephp](https://github.com/pieceofcake2/cakephp). It provides an
 `AsyncAws` component that creates AsyncAws clients, a session handler and a cache engine that
 store data in Amazon DynamoDB, an email transport that sends email with the Amazon SES API v2,
-and a small helper for S3 objects.
+an S3 stream wrapper (`s3://` paths) and a small helper for S3 objects.
 
 It is the AsyncAws counterpart of [pieceofcake2/aws](https://github.com/pieceofcake2/aws),
 which uses the full [AWS SDK for PHP](https://github.com/aws/aws-sdk-php). AsyncAws has one
@@ -17,6 +17,7 @@ deployments small, for example on AWS Lambda with [Bref](https://bref.sh).
 - [DynamoDB Session Handler](#dynamodb-session-handler)
 - [DynamoDB Cache Engine](#dynamodb-cache-engine)
 - [Amazon SES Email Transport](#amazon-ses-email-transport)
+- [S3 Stream Wrapper](#s3-stream-wrapper)
 - [S3 Storage](#s3-storage)
 - [Migrating from pieceofcake2/aws](#migrating-from-pieceofcake2-aws)
 - [Testing](#testing)
@@ -36,6 +37,7 @@ The plugin requires only `async-aws/core`. Install the AsyncAws package of each 
 | [DynamoDB session handler](#dynamodb-session-handler) | `async-aws/dynamo-db` |
 | [DynamoDB cache engine](#dynamodb-cache-engine) | `async-aws/dynamo-db` |
 | [Amazon SES email transport](#amazon-ses-email-transport) | `async-aws/ses` |
+| [S3 stream wrapper](#s3-stream-wrapper) | `async-aws/simple-s3` (installs `async-aws/s3`) |
 | [S3 storage](#s3-storage) | `async-aws/simple-s3` (installs `async-aws/s3`) |
 | `$this->AsyncAws->S3`, `createS3()` | `async-aws/s3` |
 | `$this->AsyncAws->SimpleS3`, `createSimpleS3()` | `async-aws/simple-s3` |
@@ -76,7 +78,12 @@ If you already use `CakePlugin::loadAll()`, this is not necessary:
 CakePlugin::load('AsyncAws');
 ```
 
-The plugin has no bootstrap file.
+To also register the [S3 stream wrapper](#s3-stream-wrapper), load the plugin with its
+bootstrap:
+
+```php
+CakePlugin::load('AsyncAws', ['bootstrap' => true]);
+```
 
 ## AsyncAws Configuration
 
@@ -353,12 +360,153 @@ CakeLog::write(LOG_INFO, 'SES message ID: ' . $result['id']);
 The sender address (`from`) must be verified in SES. When SES rejects the email, an
 exception of AsyncAws is thrown, for example `AsyncAws\Ses\Exception\MessageRejectedException`.
 
-## S3 Storage
+## S3 Stream Wrapper
 
-AsyncAws has no S3 stream wrapper, so `s3://` paths cannot be used with PHP's file functions
-(`file_get_contents()`, `fopen()`, ...) as with pieceofcake2/aws. The plugin does not provide
-one: a stream wrapper has to emulate seeking, appending, directories and `stat()` on top of
-S3, which is fragile. Use `S3Storage` or the AsyncAws S3 clients instead.
+The S3 stream wrapper lets you use `s3://bucket/key` paths with PHP's file functions
+(`file_get_contents()`, `file_put_contents()`, `fopen()`, `is_file()`, `scandir()`, ...). It is a
+port of the stream wrapper of the AWS SDK for PHP (`Aws\S3\StreamWrapper`), which
+pieceofcake2/aws registers, to AsyncAws, with the same scope and limits. It needs
+`async-aws/simple-s3`.
+
+Load the plugin with `'bootstrap' => true` to register it with the `AsyncAws` configuration (or
+the `Aws` configuration, as the other features), or register it yourself:
+
+```php
+App::uses('S3StreamWrapper', 'AsyncAws.Lib');
+
+// With the AsyncAws configuration
+S3StreamWrapper::bootstrap();
+
+// Or with a client
+S3StreamWrapper::register($this->AsyncAws->createSimpleS3(['region' => 'us-east-1']));
+```
+
+When `async-aws/simple-s3` is not installed, the bootstrap logs a warning and does not register
+the wrapper. Then:
+
+```php
+file_put_contents('s3://my-bucket/reports/today.csv', $csv);
+echo file_get_contents('s3://my-bucket/reports/today.csv');
+
+if (is_file('s3://my-bucket/reports/today.csv')) {
+    echo filesize('s3://my-bucket/reports/today.csv');
+}
+
+// "today.csv", ...
+foreach (scandir('s3://my-bucket/reports') as $name) {
+    echo $name;
+}
+```
+
+Options of the S3 operations can be passed with a stream context:
+
+```php
+$context = stream_context_create([
+    's3' => [
+        'ACL' => 'private',
+        'ContentType' => 'text/csv',
+        'CacheControl' => 'max-age=3600',
+        'Metadata' => ['source' => 'reports'],
+        'ServerSideEncryption' => 'AES256',
+    ],
+]);
+file_put_contents('s3://my-bucket/reports/today.csv', $csv, 0, $context);
+```
+
+The options are passed to the AsyncAws operation (PutObject, GetObject, CopyObject, ...), which
+uses those it knows: for example `VersionId` or `Range` for reading, and `VersionId` for
+`unlink()`. These options are used by the wrapper itself:
+
+| Option | Description |
+| --- | --- |
+| `seekable` | `true` makes a read stream seekable (see below). |
+| `delimiter` | Delimiter of `opendir()`/`scandir()`. Default: `/`. An empty string lists all the keys under the prefix. |
+| `listFilter` | A callable for `opendir()` that receives each entry (`Key`, `Size`, `LastModified`, ... or `Prefix`) and returns whether to list it. |
+| `PartSize` | Part size of multipart uploads, in MB (default: 64). |
+
+These functions are supported:
+
+| Function | How |
+| --- | --- |
+| `fopen()` with `r` | GetObject. The body is streamed. |
+| `fopen()` with `w`, `x` | The data is written to a `php://temp` buffer and uploaded when the stream is flushed (`fflush()`) or closed. Bodies larger than 64 MB are uploaded in parts. `x` fails when the object exists (HeadObject). |
+| `fopen()` with `a` | The object is downloaded into the buffer (or the buffer starts empty when the object does not exist), and the result is uploaded. |
+| `fread()`, `fwrite()`, `feof()`, `ftell()`, `fseek()`, `fflush()`, `fclose()`, `fstat()` | On the stream or its buffer. |
+| `file_exists()`, `is_file()`, `is_dir()`, `filesize()`, `filemtime()`, `stat()`, ... | HeadObject. When the key is not an object, a prefix with objects (ListObjectsV2) is a directory. Buckets and `s3://` are directories. Files and directories have the mode `0777`. |
+| `unlink()` | DeleteObject. |
+| `rename()` | CopyObject (with the metadata) and DeleteObject, in a bucket or between buckets. |
+| `copy()` | Reads and writes the object. |
+| `mkdir()` | `s3://bucket` creates the bucket in the region of the client. `s3://bucket/dir` creates an empty `dir/` object. |
+| `rmdir()` | `s3://bucket` deletes the bucket. `s3://bucket/dir` deletes the `dir/` object when nothing else has the prefix. |
+| `opendir()`, `readdir()`, `rewinddir()`, `closedir()`, `scandir()` | ListObjectsV2 with the delimiter, page by page. `dir/` objects are skipped. |
+
+### Limitations
+
+These are the limitations of the stream wrapper of the AWS SDK for PHP, which this wrapper
+keeps:
+
+- Only the modes `r`, `w`, `a` and `x` are supported (`r+`, `w+`, `c`, ... are not), so a
+  stream either reads or writes.
+- A read stream (`r`) cannot seek, unless the `seekable` context option is `true`. Then the
+  bytes read are kept in a `php://temp` buffer, so that the stream can seek backward and forward.
+- Writes are uploaded when the stream is flushed or closed, not while you write. Each
+  `fflush()` uploads the whole buffer again. An upload error triggers a warning, but
+  `fclose()` and `file_put_contents()` cannot report it, so call `fflush()` and check its
+  result when it matters.
+- `a` downloads the whole object, and uploads it again when the stream is closed. Two processes
+  that append at the same time overwrite each other's changes.
+- `touch()`, `chmod()`, `chown()`, `flock()` (and `file_put_contents()` with `LOCK_EX`) and
+  `ftruncate()` are not supported.
+- Directories are emulated with key prefixes. `mkdir()` ignores `recursive`. `rmdir()` of a
+  prefix deletes only its `dir/` object, and fails when the prefix has other objects; it
+  returns `true` when the prefix has no objects at all.
+- `mkdir()` without an `ACL` context option sends the ACL of the mode, as the AWS SDK does:
+  `public-read` for `07xx` (including the default `0777`), `authenticated-read` for `06xx`, and
+  `private` otherwise. Buckets with the "Bucket owner enforced" object ownership setting (the
+  default for new buckets) accept only the `bucket-owner-full-control` ACL, so pass it as the
+  `ACL` context option there.
+- `rename()` copies the object with one CopyObject request, so it is limited to objects up to
+  5 GB (the AWS SDK switches to a multipart copy above 5 GB). It is not atomic: the source is
+  deleted after the copy.
+- The results of `url_stat()` and the entries listed by `readdir()` are cached in the process
+  (up to 1000 paths), and the wrapper clears them when it changes a path. Call
+  `S3StreamWrapper::clearCache()` when other processes change the objects. PHP's `clearstatcache()`
+  does not clear this cache.
+- A read stream receives the body through AsyncAws, which keeps a copy of the bytes received in a
+  `php://temp` stream (in memory up to 2 MB, then in a temporary file).
+- Errors trigger an `E_USER_WARNING` and the function returns `false`. `file_exists()`,
+  `is_file()` and the like report missing paths without a warning.
+- The wrapper is registered with `STREAM_IS_URL`, so it needs `allow_url_fopen`, and paths
+  cannot be included (`include 's3://...'`).
+
+These differ from the AWS SDK:
+
+- `opendir()` sends the first ListObjectsV2 request when the directory is opened, so a missing
+  bucket makes `opendir()` and `scandir()` fail with a warning. An error on a later page makes
+  `readdir()` return `false` with a warning instead of throwing an exception.
+- `rmdir()` of a prefix also fails when the prefix has a `dir/` object and other objects (the
+  AWS SDK deletes the `dir/` object then).
+- `rename()` sends an ACL only when the `ACL` (or `acl`) context option is set. The AWS SDK
+  always sends one (`private` by default), and buckets with ACLs disabled accept only
+  `bucket-owner-full-control`.
+- `a` treats only a missing object (404) as a new object; other errors make `fopen()` fail.
+- `fstat()` returns the file mode `0100777`.
+- Uploads with an `async-aws/s3` client (`S3StreamWrapper::register(new S3Client(...))`) use
+  PutObject, up to 5 GB, as the AWS SDK. With an `async-aws/simple-s3` client (the default),
+  bodies larger than 64 MB (`PartSize`) are uploaded in parts. The content type of a key is
+  guessed from its extension with CakePHP's list of MIME types, when `ContentType` is not set.
+
+### CakePHP's File and Folder Classes
+
+CakePHP 2's `File` and `Folder` classes do not work with `s3://` paths, with this wrapper or with
+the AWS SDK's: `Folder::isAbsolute()` recognizes the protocol of a stream wrapper only when it
+has letters only, so `s3://bucket/dir` is handled as a relative path. With a protocol of letters
+only, for example `S3StreamWrapper::register($client, 'awss')`, `Folder::read()`, `find()` and
+`new Folder($path, true)` work, and `File` reads, writes, appends to and deletes existing objects.
+`File::write()` and `File::create()` cannot create an object, because `File::create()` calls
+`touch()`. Use `file_put_contents()` to create objects.
+
+## S3 Storage
 
 `S3Storage` takes the same `s3://bucket/key` paths and provides the common file operations
 with [`async-aws/simple-s3`](https://async-aws.com/integration/simple-s3.html):
@@ -400,7 +548,7 @@ file_put_contents(TMP . 'today.csv', $storage->read('s3://my-bucket/reports/toda
 | `'engine' => 'Aws.DynamoDbSession'` | `'engine' => 'AsyncAws.DynamoDbSession'`. Same options and table. |
 | `'engine' => 'Aws.DynamoDb'` (cache) | `'engine' => 'AsyncAws.DynamoDb'`. Same settings and table; `client` takes an AsyncAws client. |
 | `'transport' => 'Aws.AmazonSesApi'` | `'transport' => 'AsyncAws.AmazonSesApi'`. Same keys, plus `token`. `version` is ignored. |
-| S3 stream wrapper (`'bootstrap' => true`, `s3://` with file functions) | Not available. Use `S3Storage` (`file_get_contents('s3://b/k')` becomes `$storage->read('s3://b/k')`). |
+| S3 stream wrapper (`CakePlugin::load('Aws', ['bootstrap' => true])`, `s3://` with file functions) | `CakePlugin::load('AsyncAws', ['bootstrap' => true])` and `composer require async-aws/simple-s3`. The same functions, context options and limits; see [S3 Stream Wrapper](#s3-stream-wrapper). Or use `S3Storage`. |
 | Errors: `Aws\Exception\AwsException` | Errors: `AsyncAws\Core\Exception\Exception` and the service exceptions, e.g. `AsyncAws\Ses\Exception\MessageRejectedException`. |
 
 Services that AsyncAws does not support are not available. See the
