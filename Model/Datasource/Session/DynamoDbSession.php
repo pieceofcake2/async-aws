@@ -8,6 +8,7 @@ App::uses('CakeSessionHandlerInterface', 'Model/Datasource/Session');
 App::uses('ComponentCollection', 'Controller');
 App::uses('AsyncAwsComponent', 'AsyncAws.Controller/Component');
 App::uses('CakeException', 'Error');
+App::uses('CakeLog', 'Log');
 App::uses('MissingPackageException', 'AsyncAws.Error');
 
 /**
@@ -23,14 +24,20 @@ App::uses('MissingPackageException', 'AsyncAws.Error');
  *
  *  - `locking` = Lock the session while a request uses it (default: true)
  *  - `consistent_read` = Use strongly consistent reads when not locking (default: true)
- *  - `session_lifetime` = Seconds until a session expires (default: `session.gc_maxlifetime`)
+ *  - `session_lifetime` = Seconds until a session expires (default: `Session.timeout` minutes, the timeout
+ *    CakeSession checks, or `session.gc_maxlifetime` when `Session.timeout` is not set)
  *  - `hash_key`, `data_attribute`, `session_lifetime_attribute` = Attribute names
  *  - `max_lock_wait_time` = Seconds to wait for a lock (default: 10)
  *  - `min_lock_retry_microtime`, `max_lock_retry_microtime` = Microseconds between attempts to get a lock (default: 10000 and 50000)
  *
- * Expired sessions are not removed by PHP's garbage collection; enable Time to Live on the table with the
- * `expires` attribute so that DynamoDB removes them. This handler turns off PHP's garbage collection
- * (`session.gc_probability = 0`) because it would never remove anything.
+ * Each write and close stores the expiration time in the `expires` attribute: the current time plus
+ * `session_lifetime`.
+ *
+ *  - DynamoDB's Time to Live removes expired sessions; enable it on the table with the `expires` attribute.
+ *  - Time to Live is lazy, so `read()` treats an expired session as empty until it is removed, and the next
+ *    write replaces its data.
+ *  - `gc()` scans the table and deletes the expired sessions. It is off by default: unless `Session.ini`
+ *    contains `session.gc_probability`, this handler sets `session.gc_probability` to 0.
  *
  * Requires `async-aws/dynamo-db`.
  */
@@ -42,6 +49,20 @@ class DynamoDbSession implements CakeSessionHandlerInterface
      * @var string
      */
     public const LOCK_ATTRIBUTE = 'lock';
+
+    /**
+     * Maximum number of delete requests in one BatchWriteItem call.
+     *
+     * @var int
+     */
+    public const BATCH_SIZE = 25;
+
+    /**
+     * Number of times unprocessed items of a BatchWriteItem call are sent again.
+     *
+     * @var int
+     */
+    public const BATCH_RETRIES = 3;
 
     private DynamoDbClient $client;
 
@@ -59,6 +80,13 @@ class DynamoDbSession implements CakeSessionHandlerInterface
     private string $dataRead = '';
 
     private bool $sessionWritten = false;
+
+    /**
+     * Whether the last read found an expired session, whose data must be replaced by the next write.
+     *
+     * @var bool
+     */
+    private bool $expiredRead = false;
 
     /**
      * Constructor
@@ -87,11 +115,13 @@ class DynamoDbSession implements CakeSessionHandlerInterface
             'min_lock_retry_microtime' => 10000,
             'max_lock_retry_microtime' => 50000,
         ];
+        $this->options['session_lifetime'] ??= static::defaultSessionLifetime();
 
         $this->client = $client ?? (new AsyncAwsComponent(new ComponentCollection()))->createDynamoDb();
 
-        // Expired sessions are removed by the table's Time to Live (`expires`), not by PHP's garbage collection.
-        if (session_status() !== PHP_SESSION_ACTIVE) {
+        // Expired sessions are removed by the table's Time to Live (`expires`). gc() scans the whole table,
+        // so PHP calls it only when the application configures `session.gc_probability`.
+        if (!isset(((array)Configure::read('Session.ini'))['session.gc_probability']) && session_status() !== PHP_SESSION_ACTIVE) {
             ini_set('session.gc_probability', '0');
         }
     }
@@ -104,6 +134,22 @@ class DynamoDbSession implements CakeSessionHandlerInterface
     protected static function clientClass(): string
     {
         return DynamoDbClient::class;
+    }
+
+    /**
+     * Returns the default session lifetime in seconds: `Session.timeout` minutes, the timeout that CakeSession
+     * checks, or `session.gc_maxlifetime` when `Session.timeout` is not set.
+     *
+     * @return int
+     */
+    protected static function defaultSessionLifetime(): int
+    {
+        $timeout = Configure::read('Session.timeout');
+        if (is_numeric($timeout) && $timeout > 0) {
+            return (int)round($timeout * 60);
+        }
+
+        return (int)ini_get('session.gc_maxlifetime');
     }
 
     /**
@@ -139,7 +185,7 @@ class DynamoDbSession implements CakeSessionHandlerInterface
     {
         $id = (string)session_id();
         if ($this->openSessionId !== $id || !$this->sessionWritten) {
-            $this->sessionWritten = $this->update($id, '', false);
+            $this->sessionWritten = $this->update($id, '', $this->expiredRead && $this->openSessionId === $id);
         }
 
         return $this->sessionWritten;
@@ -156,17 +202,17 @@ class DynamoDbSession implements CakeSessionHandlerInterface
         $id = (string)$id;
         $this->openSessionId = $id;
         $this->dataRead = '';
+        $this->expiredRead = false;
 
         $item = $this->options['locking'] ? $this->lockAndGet($id) : $this->get($id);
 
         $data = $item[$this->options['data_attribute']] ?? null;
         $expires = $item[$this->options['session_lifetime_attribute']] ?? null;
-        if ($data !== null && $expires !== null) {
+        if ($expires !== null && (int)$expires->getN() <= time()) {
+            // Time to Live removes the item; until then it is an empty session.
+            $this->expiredRead = true;
+        } elseif ($data !== null && $expires !== null) {
             $this->dataRead = (string)($data->getS() ?? $data->getB());
-            if ((int)$expires->getN() <= time()) {
-                $this->dataRead = '';
-                $this->destroy($id);
-            }
         }
 
         return $this->dataRead;
@@ -183,8 +229,11 @@ class DynamoDbSession implements CakeSessionHandlerInterface
     {
         $id = (string)$id;
         $data = (string)$data;
-        $changed = $id !== $this->openSessionId || $data !== $this->dataRead;
+        // After an expired read, the data is always written so that an expired session that could not be deleted
+        // is not renewed with its old data.
+        $changed = $id !== $this->openSessionId || $data !== $this->dataRead || $this->expiredRead;
         $this->openSessionId = $id;
+        $this->expiredRead = false;
 
         return $this->sessionWritten = $this->update($id, $data, $changed);
     }
@@ -199,6 +248,7 @@ class DynamoDbSession implements CakeSessionHandlerInterface
     {
         $id = (string)$id;
         $this->openSessionId = $id;
+        $this->expiredRead = false;
 
         try {
             $this->client->deleteItem([
@@ -215,14 +265,107 @@ class DynamoDbSession implements CakeSessionHandlerInterface
     /**
      * Run the Garbage collection on the session storage.
      *
-     * Does nothing. Expired sessions are removed by the table's Time to Live (`expires`).
+     * Scans the whole table and deletes the sessions whose `expires` time has passed, in batches of 25.
+     * Errors are logged with the `session` scope, never raised.
      *
-     * @param int $expires Timestamp (defaults to current time)
+     * PHP calls this only when `session.gc_probability` is not 0, which this handler sets by default:
+     * normally, the table's Time to Live (`expires`) removes the expired sessions.
+     *
+     * @param int $expires Not used; the expiration time of each session is stored in its item
      * @return bool Success
      */
     public function gc($expires = null): bool
     {
+        $this->deleteExpiredSessions();
+
         return true;
+    }
+
+    /**
+     * Deletes the expired sessions: scans the whole table for items whose `expires` time has passed and
+     * deletes them with BatchWriteItem. Errors are logged with the `session` scope, never raised.
+     *
+     * @return int Number of deleted sessions
+     */
+    public function deleteExpiredSessions(): int
+    {
+        $table = (string)$this->options['table_name'];
+        $hashKey = (string)$this->options['hash_key'];
+        $input = [
+            'TableName' => $table,
+            'ProjectionExpression' => '#id',
+            'FilterExpression' => '#expires <= :now',
+            'ExpressionAttributeNames' => ['#id' => $hashKey, '#expires' => $this->options['session_lifetime_attribute']],
+            'ExpressionAttributeValues' => [':now' => ['N' => (string)time()]],
+        ];
+        $deleted = 0;
+
+        try {
+            do {
+                $result = $this->client->scan($input);
+                $requests = [];
+                foreach ($result->getItems(true) as $item) {
+                    $requests[] = ['DeleteRequest' => ['Key' => [$hashKey => $item[$hashKey]]]];
+                }
+                foreach (array_chunk($requests, self::BATCH_SIZE) as $chunk) {
+                    $deleted += $this->batchDelete($table, $chunk);
+                }
+                $input['ExclusiveStartKey'] = $result->getLastEvaluatedKey();
+            } while ($input['ExclusiveStartKey']);
+        } catch (AsyncAwsException $e) {
+            $this->logGcError($table, $e);
+        }
+
+        return $deleted;
+    }
+
+    /**
+     * Sends delete requests with BatchWriteItem, sending unprocessed items again a limited number of times.
+     *
+     * @param string $table Table name
+     * @param array<mixed> $requests Delete requests (at most 25)
+     * @return int Number of processed requests
+     */
+    private function batchDelete(string $table, array $requests): int
+    {
+        $total = count($requests);
+        for ($attempt = 0; $requests && $attempt <= self::BATCH_RETRIES; $attempt++) {
+            if ($attempt > 0) {
+                usleep(50000 * 2 ** ($attempt - 1));
+            }
+            try {
+                $requests = $this->client->batchWriteItem(['RequestItems' => [$table => $requests]])->getUnprocessedItems()[$table] ?? [];
+            } catch (AsyncAwsException $e) {
+                $this->logGcError($table, $e);
+                break;
+            }
+        }
+
+        if ($requests) {
+            CakeLog::write(LOG_WARNING, sprintf(
+                'DynamoDB session garbage collection could not delete %d expired sessions from table "%s".',
+                count($requests),
+                $table,
+            ), ['session']);
+        }
+
+        return $total - count($requests);
+    }
+
+    /**
+     * Logs an error of the garbage collection.
+     *
+     * @param string $table Table name
+     * @param \AsyncAws\Core\Exception\Exception $e Error
+     * @return void
+     */
+    private function logGcError(string $table, AsyncAwsException $e): void
+    {
+        CakeLog::write(LOG_WARNING, sprintf(
+            'DynamoDB session garbage collection of table "%s" failed: %s',
+            $table,
+            $e->getMessage(),
+        ), ['session']);
     }
 
     /**
