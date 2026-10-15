@@ -8,6 +8,21 @@ App::uses('DynamoDbSession', 'AsyncAws.Model/Datasource/Session');
 App::uses('SessionHandlerAdapter', 'Model/Datasource/Session');
 
 /**
+ * Counts the calls of gc().
+ */
+class DynamoDbSessionIntegrationTestSession extends DynamoDbSession
+{
+    public static int $gcCalls = 0;
+
+    public function gc($expires = null): bool
+    {
+        static::$gcCalls++;
+
+        return parent::gc($expires);
+    }
+}
+
+/**
  * Runs the DynamoDB session handler against DynamoDB Local.
  *
  * Skipped unless the `DYNAMODB_ENDPOINT` environment variable is set, e.g. `http://localhost:8000`.
@@ -73,6 +88,73 @@ class DynamoDbSessionIntegrationTest extends CakeTestCase
         return $session;
     }
 
+    private function getItem(string $id, ?string $sessionName = null): array
+    {
+        return $this->client->getItem([
+            'TableName' => $this->table,
+            'Key' => ['id' => ['S' => ($sessionName ?? session_name()) . '_' . $id]],
+            'ConsistentRead' => true,
+        ])->getItem();
+    }
+
+    private function putItem(string $id, string $data, int $expires, ?string $sessionName = null): void
+    {
+        $this->client->putItem([
+            'TableName' => $this->table,
+            'Item' => [
+                'id' => ['S' => ($sessionName ?? session_name()) . '_' . $id],
+                'data' => ['S' => $data],
+                'expires' => ['N' => (string)$expires],
+            ],
+        ])->resolve();
+    }
+
+    /**
+     * Runs `$callback` with PHP sessions that use the handler and no cookies.
+     *
+     * @param callable $callback Callback
+     * @param array<string, string> $ini Other session settings
+     * @return void
+     */
+    private function withPhpSession(callable $callback, array $ini = []): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $this->markTestSkipped('A session is already active.');
+        }
+        $ini += [
+            'session.use_cookies' => '0',
+            'session.use_only_cookies' => '0',
+            'session.use_strict_mode' => '0',
+            'session.cache_limiter' => '',
+            'session.gc_divisor' => '1',
+        ];
+        $before = [];
+        foreach (array_unique([...array_keys($ini), 'session.gc_probability']) as $key) {
+            $before[$key] = (string)ini_get($key);
+        }
+        foreach ($ini as $key => $value) {
+            ini_set($key, $value);
+        }
+        $name = session_name();
+        DynamoDbSessionIntegrationTestSession::$gcCalls = 0;
+
+        try {
+            // Like CakeSession: the ini settings are applied first, then the handler is created.
+            session_set_save_handler(new SessionHandlerAdapter(new DynamoDbSessionIntegrationTestSession()), false);
+            session_name('DYNAMODB_TEST');
+            $callback();
+        } finally {
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_abort();
+            }
+            $_SESSION = [];
+            session_name($name);
+            foreach ($before as $key => $value) {
+                ini_set($key, $value);
+            }
+        }
+    }
+
     public function testWriteReadDestroy(): void
     {
         $session = $this->openSession();
@@ -106,11 +188,9 @@ class DynamoDbSessionIntegrationTest extends CakeTestCase
         ])->resolve();
 
         $this->assertSame('', $this->openSession()->read('old'));
-        $this->assertSame([], $this->client->getItem([
-            'TableName' => $this->table,
-            'Key' => ['id' => ['S' => session_name() . '_old']],
-            'ConsistentRead' => true,
-        ])->getItem());
+        // Time to Live removes the item, not the read.
+        $this->assertSame('stale', $this->getItem('old')['data']->getS());
+        $this->assertSame('', $this->openSession(['locking' => false])->read('old'));
     }
 
     public function testExpiredSessionIsNotRenewedWithItsData(): void
@@ -153,25 +233,7 @@ class DynamoDbSessionIntegrationTest extends CakeTestCase
 
     public function testSessionRegenerateIdKeepsData(): void
     {
-        if (session_status() === PHP_SESSION_ACTIVE) {
-            $this->markTestSkipped('A session is already active.');
-        }
-        $ini = [
-            'session.use_cookies' => '0',
-            'session.use_only_cookies' => '0',
-            'session.use_strict_mode' => '0',
-            'session.cache_limiter' => '',
-        ];
-        $before = [];
-        foreach ($ini as $key => $value) {
-            $before[$key] = (string)ini_get($key);
-            ini_set($key, $value);
-        }
-        $name = session_name();
-
-        try {
-            session_set_save_handler(new SessionHandlerAdapter(new DynamoDbSession()), false);
-            session_name('DYNAMODB_TEST');
+        $this->withPhpSession(function () {
             session_id('regenerate0test0session0id00001');
             $this->assertTrue(session_start());
             $_SESSION['Auth'] = ['id' => 1];
@@ -184,27 +246,80 @@ class DynamoDbSessionIntegrationTest extends CakeTestCase
             session_write_close();
 
             $this->assertNotSame('regenerate0test0session0id00001', $newId);
-            $this->assertSame([], $this->client->getItem([
-                'TableName' => $this->table,
-                'Key' => ['id' => ['S' => 'DYNAMODB_TEST_regenerate0test0session0id00001']],
-                'ConsistentRead' => true,
-            ])->getItem());
+            $this->assertSame([], $this->getItem('regenerate0test0session0id00001', 'DYNAMODB_TEST'));
 
             $_SESSION = [];
             session_id($newId);
             $this->assertTrue(session_start());
             $this->assertSame(['id' => 1], $_SESSION['Auth']);
             session_write_close();
-        } finally {
-            if (session_status() === PHP_SESSION_ACTIVE) {
-                session_abort();
-            }
-            $_SESSION = [];
-            session_name($name);
-            foreach ($before as $key => $value) {
-                ini_set($key, $value);
-            }
+        });
+    }
+
+    public function testGcDeletesOnlyExpiredSessions(): void
+    {
+        for ($i = 1; $i <= 30; $i++) {
+            $this->putItem('old' . $i, 'stale', time() - $i);
         }
+        $this->putItem('now', 'valid', time() + 60);
+        $this->putItem('later', 'valid', time() + 3600);
+
+        $this->assertTrue($this->openSession()->gc());
+
+        $ids = [];
+        foreach ($this->client->scan(['TableName' => $this->table, 'ConsistentRead' => true])->getItems() as $item) {
+            $ids[] = $item['id']->getS();
+        }
+        sort($ids);
+        $this->assertSame([session_name() . '_later', session_name() . '_now'], $ids);
+    }
+
+    public function testPhpDoesNotCallGcWithTheDocumentedConfiguration(): void
+    {
+        // CakeSession applies Session.ini before it creates the handler.
+        Configure::write('Session.ini', ['session.gc_probability' => 0]);
+        $this->putItem('old', 'stale', time() - 10, 'DYNAMODB_TEST');
+
+        // gc_divisor is 1, so PHP would call gc() on every start if gc_probability were 1.
+        $this->withPhpSession(function () {
+            session_id('gc0test0session0id0000000000001');
+            $this->assertTrue(session_start());
+            session_write_close();
+        }, ['session.gc_probability' => '0']);
+
+        $this->assertSame(0, DynamoDbSessionIntegrationTestSession::$gcCalls);
+        $this->assertSame('stale', $this->getItem('old', 'DYNAMODB_TEST')['data']->getS());
+    }
+
+    public function testPhpDoesNotCallGcWithoutConfiguration(): void
+    {
+        $this->putItem('old', 'stale', time() - 10, 'DYNAMODB_TEST');
+
+        // PHP's default gc_probability is 1; the handler sets it to 0.
+        $this->withPhpSession(function () {
+            session_id('gc0test0session0id0000000000001');
+            $this->assertTrue(session_start());
+            session_write_close();
+        }, ['session.gc_probability' => '1']);
+
+        $this->assertSame(0, DynamoDbSessionIntegrationTestSession::$gcCalls);
+        $this->assertSame('stale', $this->getItem('old', 'DYNAMODB_TEST')['data']->getS());
+    }
+
+    public function testPhpCallsGcWhenEnabled(): void
+    {
+        Configure::write('Session.ini', ['session.gc_probability' => 1, 'session.gc_divisor' => 1]);
+        $this->putItem('old', 'stale', time() - 10, 'DYNAMODB_TEST');
+
+        $this->withPhpSession(function () {
+            session_id('gc0test0session0id0000000000001');
+            $this->assertTrue(session_start());
+            session_write_close();
+        }, ['session.gc_probability' => '1']);
+
+        $this->assertSame(1, DynamoDbSessionIntegrationTestSession::$gcCalls);
+        $this->assertSame([], $this->getItem('old', 'DYNAMODB_TEST'));
+        $this->assertNotSame([], $this->getItem('gc0test0session0id0000000000001', 'DYNAMODB_TEST'));
     }
 
     public function testLockIsHeldUntilWrite(): void
