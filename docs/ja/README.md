@@ -78,7 +78,7 @@ async-aws/dynamo-db"。
 CakePlugin::load('AsyncAws');
 ```
 
-[S3 ストリームラッパー](s3.md#s3-stream-wrapper) も登録するには、プラグインをブートストラップ付きで読み込みます。
+[S3 ストリームラッパー](s3.md#s3-stream-wrapper) と [Amazon SES のメーラーの DSN](email.md#mailer-dsn) も登録するには、プラグインをブートストラップ付きで読み込みます。
 
 ```php
 CakePlugin::load('AsyncAws', ['bootstrap' => true]);
