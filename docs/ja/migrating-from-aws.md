@@ -7,7 +7,7 @@
 | `Configure::write('Aws', [...])` | `Configure::write('AsyncAws', [...])`。または `Aws` のままにします (`AsyncAws` が設定されていない場合に使われます)。`version` は無視されます。 |
 | `'credentials' => ['key' => ..., 'secret' => ...]` | 同じです。または `accessKeyId` と `accessKeySecret`。 |
 | `public $components = ['Aws.Aws']` | `public $components = ['AsyncAws.AsyncAws']` |
-| `$this->Aws->S3`、`$this->Aws->createS3($args)` | `$this->AsyncAws->S3`、`$this->AsyncAws->createS3($args)`。クライアントは AsyncAws のクライアントです。メソッドは同じパラメーターを受け取りますが、配列 (`$result['Contents']`) ではなくゲッターを持つ結果オブジェクト (`$result->getContents()`) を返します。 |
+| `$this->Aws->S3`、`$this->Aws->createS3($args)` | `$this->AsyncAws->S3`、`$this->AsyncAws->createS3($args)`。クライアントは AsyncAws のクライアントです。メソッドは同じパラメータを受け取りますが、配列 (`$result['Contents']`) ではなくゲッターを持つ結果オブジェクト (`$result->getContents()`) を返します。 |
 | `$this->Aws->createSesV2()` | `$this->AsyncAws->createSesV2()` または `createSes()` |
 | `'engine' => 'Aws.DynamoDbSession'` | `'engine' => 'AsyncAws.DynamoDbSession'`。オプションとテーブルは同じです。 |
 | `'engine' => 'Aws.DynamoDb'` (キャッシュ) | `'engine' => 'AsyncAws.DynamoDb'`。設定とテーブルは同じです。`client` には AsyncAws のクライアントを渡します。 |
