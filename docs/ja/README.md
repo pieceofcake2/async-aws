@@ -25,13 +25,13 @@ AsyncAws はサービスごとに小さなパッケージに分かれている�
 
 ## インストール
 
-[Composer](https://getcomposer.org/) でプラグインをインストールします:
+[Composer](https://getcomposer.org/) でプラグインをインストールします。
 
 ```bash
 composer require pieceofcake2/async-aws
 ```
 
-このプラグインが必要とするのは `async-aws/core` だけです。使用する機能ごとに、その AsyncAws パッケージをインストールしてください:
+このプラグインが必要とするのは `async-aws/core` だけです。使用する機能ごとに、その AsyncAws パッケージをインストールしてください。
 
 | 機能 | パッケージ |
 | --- | --- |
@@ -64,7 +64,7 @@ async-aws/dynamo-db"。
 コンポーネントで別のサービスを使うには、そのパッケージをインストールしてください。例: `composer require async-aws/sqs`。
 
 このプラグインは `cakephp-plugin` タイプなので、`composer/installers` によってプラグインディレクトリにインストールされます。
-正しい場所にインストールされるよう、アプリケーションの `composer.json` で `installer-paths` を設定してください:
+正しい場所にインストールされるよう、アプリケーションの `composer.json` で `installer-paths` を設定してください。
 
 | レイアウト | `installer-paths` |
 | --- | --- |
@@ -72,13 +72,13 @@ async-aws/dynamo-db"。
 | レガシー (`app/Config/`、`app/Plugin/`) | `"app/Plugin/{$name}/": ["type:cakephp-plugin"]` |
 
 `config/bootstrap.php` (レガシーレイアウトでは `app/Config/bootstrap.php`) でプラグインを読み込みます。
-すでに `CakePlugin::loadAll()` を使っている場合、これは不要です:
+すでに `CakePlugin::loadAll()` を使っている場合、これは不要です。
 
 ```php
 CakePlugin::load('AsyncAws');
 ```
 
-[S3 ストリームラッパー](s3.md#s3-stream-wrapper) も登録するには、プラグインをブートストラップ付きで読み込みます:
+[S3 ストリームラッパー](s3.md#s3-stream-wrapper) も登録するには、プラグインをブートストラップ付きで読み込みます。
 
 ```php
 CakePlugin::load('AsyncAws', ['bootstrap' => true]);
@@ -90,7 +90,7 @@ CakePlugin::load('AsyncAws', ['bootstrap' => true]);
 
 すべてのクライアントは `AsyncAws` 設定から作成されます。
 `config/core.php` (レガシーレイアウトでは `app/Config/core.php`) で設定するか、
-プラグインを読み込む前に `config/bootstrap.php` で設定してください:
+プラグインを読み込む前に `config/bootstrap.php` で設定してください。
 
 ```php
 Configure::write('AsyncAws', [
@@ -104,7 +104,7 @@ Configure::write('AsyncAws', [
 設定には、`region`、`endpoint`、`profile`、`accessKeyId`、`accessKeySecret`、`sessionToken`、
 `pathStyleEndpoint`、`debug` などの AsyncAws のオプションを指定できます
 ([Configuration](https://async-aws.com/configuration.html) を参照)。
-AWS SDK for PHP の次のキーは変換されます:
+AWS SDK for PHP の次のキーは変換されます。
 
 | AWS SDK のキー | AsyncAws のオプション |
 | --- | --- |
@@ -114,7 +114,7 @@ AWS SDK for PHP の次のキーは変換されます:
 | `use_path_style_endpoint` | `pathStyleEndpoint` |
 
 `version` など AsyncAws が知らないその他のキーは無視されます。
-次の 3 つのキーはオブジェクトを受け取り、クライアントのコンストラクターに渡されます:
+次の 3 つのキーはオブジェクトを受け取り、クライアントのコンストラクターに渡されます。
 
 | キー | 説明 |
 | --- | --- |
@@ -126,7 +126,7 @@ AWS SDK for PHP の次のキーは変換されます:
 
 ### 認証情報
 
-認証情報が設定されていない場合、AsyncAws はデフォルトの認証情報チェーンを使います:
+認証情報が設定されていない場合、AsyncAws はデフォルトの認証情報チェーンを使います。
 環境変数 (`AWS_ACCESS_KEY_ID`、`AWS_SECRET_ACCESS_KEY`、`AWS_SESSION_TOKEN`)、
 Web ID トークン (EKS)、共有の設定ファイルと認証情報ファイル (`~/.aws/config`、`~/.aws/credentials`)、
 ECS コンテナの認証情報、EC2 インスタンスメタデータサービスの順です。

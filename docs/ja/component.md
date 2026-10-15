@@ -1,6 +1,6 @@
 # AsyncAws コンポーネント
 
-`AsyncAws.AsyncAws` コンポーネントは、`AsyncAws` 設定を使って AsyncAws クライアントを作成します:
+`AsyncAws.AsyncAws` コンポーネントは、`AsyncAws` 設定を使って AsyncAws クライアントを作成します。
 
 ```php
 class FilesController extends AppController
@@ -41,4 +41,4 @@ class FilesController extends AppController
 AsyncAws クライアントはリクエストを非同期に送信します。リクエストはメソッドを呼び出したときに送信され、
 結果を読むとき (または結果オブジェクトが破棄されるとき) にその完了を待ちます。
 何も読まずに結果を待ち、エラー時に例外を投げるには、結果に対して `resolve()` を呼び出します。
-[Async](https://async-aws.com/features/async.html) を参照してください。
+[Async](https://async-aws.com/features/async.html) をご覧ください。

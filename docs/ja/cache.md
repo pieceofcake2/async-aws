@@ -1,7 +1,7 @@
 # DynamoDB キャッシュエンジン
 
 `AsyncAws.DynamoDb` は、キャッシュエントリーを DynamoDB のテーブルに保存します。
-`config/bootstrap.php` (レガシーレイアウトでは `app/Config/bootstrap.php`) または `config/core.php` で設定します:
+`config/bootstrap.php` (レガシーレイアウトでは `app/Config/bootstrap.php`) または `config/core.php` で設定します。
 
 ```php
 Cache::config('default', [
@@ -13,7 +13,7 @@ Cache::config('default', [
 ```
 
 このエンジンには、すべてのキャッシュエンジンに共通の設定 (`prefix`、`duration`、`groups`、...) に加えて、
-次の設定があります:
+次の設定があります。
 
 | 設定 | デフォルト | 説明 |
 | --- | --- | --- |
@@ -47,13 +47,13 @@ Cache::config('default', [
 ## テーブルの作成
 
 テーブルには `id` (`keyAttribute`) という名前の文字列のパーティションキーが必要です。
-`createTable()` はオンデマンドキャパシティでテーブルを作成し、Time to Live を有効にします:
+`createTable()` はオンデマンドキャパシティでテーブルを作成し、Time to Live を有効にします。
 
 ```php
 Cache::engine('default')->createTable();
 ```
 
-または AWS CLI で作成します:
+または AWS CLI で作成します。
 
 ```bash
 aws dynamodb create-table --table-name DYNAMODB_TABLE_NAME \

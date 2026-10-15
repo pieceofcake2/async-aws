@@ -2,7 +2,7 @@
 
 AsyncAws クライアントは [Symfony HTTP クライアント](https://symfony.com/doc/current/http_client.html#testing) で
 リクエストを送信するため、テストではそれを `MockHttpClient` に置き換えられます。
-設定の `httpClient` キーに入れると、プラグインのすべてのクライアントがそれを使います:
+設定の `httpClient` キーに入れると、プラグインのすべてのクライアントがそれを使います。
 
 ```php
 use Symfony\Component\HttpClient\MockHttpClient;
@@ -20,4 +20,4 @@ Configure::write('AsyncAws', [
 
 AsyncAws クライアントを呼び出す自分のコードをテストするには、クライアントをモックし、
 `AsyncAws\Core\Test\ResultMockFactory` でその結果を作成することもできます。
-[Writing tests and mocking](https://async-aws.com/features/tests.html) を参照してください。
+[Writing tests and mocking](https://async-aws.com/features/tests.html) をご覧ください。

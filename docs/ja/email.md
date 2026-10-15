@@ -1,7 +1,7 @@
 # Amazon SES メールトランスポート
 
 `AsyncAws.AmazonSesApi` は、Amazon SES API v2 の `SendEmail` オペレーションでメールを送信します。
-`config/email.php` (レガシーレイアウトでは `app/Config/email.php`) で、メールプロファイルのトランスポートとして設定します:
+`config/email.php` (レガシーレイアウトでは `app/Config/email.php`) で、メールプロファイルのトランスポートとして設定します。
 
 ```php
 class EmailConfig
@@ -20,7 +20,7 @@ class EmailConfig
 }
 ```
 
-SES クライアントは `AsyncAws` 設定から作成されます。メールプロファイルの次のキーで、その設定を上書きできます:
+SES クライアントは `AsyncAws` 設定から作成されます。メールプロファイルの次のキーで、その設定を上書きできます。
 
 | キー | 説明 |
 | --- | --- |
@@ -29,7 +29,7 @@ SES クライアントは `AsyncAws` 設定から作成されます。メール�
 | `token` | 一時的な `key` と `secret` のためのセッショントークン。 |
 
 このトランスポートは、テキストと HTML のパート、`To`、`Cc`、`Bcc`、`Reply-To` のアドレス、添付ファイルを送信します。
-`CakeEmail::send()` は SES のメッセージ ID を `id` として返します:
+`CakeEmail::send()` は SES のメッセージ ID を `id` として返します。
 
 ```php
 App::uses('CakeEmail', 'Network/Email');

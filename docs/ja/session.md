@@ -1,7 +1,7 @@
 # DynamoDB セッションハンドラー
 
 `AsyncAws.DynamoDbSession` は、セッションを DynamoDB のテーブルに保存します。
-`config/core.php` (レガシーレイアウトでは `app/Config/core.php`) で設定します:
+`config/core.php` (レガシーレイアウトでは `app/Config/core.php`) で設定します。
 
 ```php
 Configure::write('Session', [
@@ -32,7 +32,7 @@ Configure::write('Session', [
   アプリケーションごとに別のセッションクッキー名 (`Session.cookie`) を付けてください。
 
 `handler` では次のキーを使えます。名前とデフォルト値は、pieceofcake2/aws が使っている
-AWS SDK for PHP のセッションハンドラーのオプションと同じです:
+AWS SDK for PHP のセッションハンドラーのオプションと同じです。
 
 | キー | デフォルト | 説明 |
 | --- | --- | --- |
@@ -58,7 +58,7 @@ DynamoDB API のデフォルトに依存しているためです。
 
 ## セッションテーブルの作成
 
-AWS CLI でテーブルを作成し、`expires` 属性で Time to Live を有効にします:
+AWS CLI でテーブルを作成し、`expires` 属性で Time to Live を有効にします。
 
 ```bash
 aws dynamodb create-table --table-name DYNAMODB_TABLE_NAME \
@@ -73,7 +73,7 @@ aws dynamodb update-time-to-live --table-name DYNAMODB_TABLE_NAME \
 
 ## セッションの期限切れの仕組み
 
-期限切れのセッションは DynamoDB 自身が削除します:
+期限切れのセッションは DynamoDB 自身が削除します。
 
 - セッションを書き込むたび、また閉じるたびに、その有効期限 (現在時刻に `session_lifetime` を足したもの) を
   `expires` 属性に保存します。
@@ -97,7 +97,7 @@ Time to Live のないテーブルのために、`DynamoDbSession::gc()` で期�
 
 スキャンはテーブルのすべてのアイテムを読み込み、その分の料金がかかります。また、PHP がガベージコレクションに
 選んだリクエストの中で実行されるため、Time to Live が有効な場合はオフのままにしてください。
-オンにするには、`Session.ini` で確率を設定します。たとえば、セッション開始 1000 回に 1 回にするには次のようにします:
+オンにするには、`Session.ini` で確率を設定します。たとえば、セッション開始 1000 回に 1 回にするには次のようにします。
 
 ```php
 Configure::write('Session', [

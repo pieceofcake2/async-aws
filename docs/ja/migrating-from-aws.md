@@ -12,8 +12,8 @@
 | `'engine' => 'Aws.DynamoDbSession'` | `'engine' => 'AsyncAws.DynamoDbSession'`。オプションとテーブルは同じです。 |
 | `'engine' => 'Aws.DynamoDb'` (キャッシュ) | `'engine' => 'AsyncAws.DynamoDb'`。設定とテーブルは同じです。`client` には AsyncAws のクライアントを渡します。 |
 | `'transport' => 'Aws.AmazonSesApi'` | `'transport' => 'AsyncAws.AmazonSesApi'`。キーは同じで、`token` が加わります。`version` は無視されます。 |
-| S3 ストリームラッパー (`CakePlugin::load('Aws', ['bootstrap' => true])`、ファイル関数での `s3://`) | `CakePlugin::load('AsyncAws', ['bootstrap' => true])` と `composer require async-aws/simple-s3`。関数、コンテキストオプション、制限は同じです。[S3 ストリームラッパー](s3.md#s3-stream-wrapper) を参照してください。または `S3Storage` を使います。 |
+| S3 ストリームラッパー (`CakePlugin::load('Aws', ['bootstrap' => true])`、ファイル関数での `s3://`) | `CakePlugin::load('AsyncAws', ['bootstrap' => true])` と `composer require async-aws/simple-s3`。関数、コンテキストオプション、制限は同じです。[S3 ストリームラッパー](s3.md#s3-stream-wrapper) をご覧ください。または `S3Storage` を使います。 |
 | エラー: `Aws\Exception\AwsException` | エラー: `AsyncAws\Core\Exception\Exception` と各サービスの例外。例: `AsyncAws\Ses\Exception\MessageRejectedException`。 |
 
 AsyncAws がサポートしていないサービスは使えません。
-[サポートされているサービスの一覧](https://async-aws.com/clients/) を参照してください。
+[サポートされているサービスの一覧](https://async-aws.com/clients/) をご覧ください。
