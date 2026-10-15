@@ -19,7 +19,7 @@ deployments small, for example on AWS Lambda with [Bref](https://bref.sh).
 - [Amazon SES Email Transport](#amazon-ses-email-transport)
 - [S3 Stream Wrapper](#s3-stream-wrapper)
 - [S3 Storage](#s3-storage)
-- [Migrating from pieceofcake2/aws](#migrating-from-pieceofcake2-aws)
+- [Migrating from pieceofcake2/aws](#migrating-from-pieceofcake2aws)
 - [Testing](#testing)
 
 ## Installation
