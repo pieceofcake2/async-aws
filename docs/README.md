@@ -196,14 +196,14 @@ Configure::write('Session', [
     'timeout' => 1440,
     'ini' => [
         'session.cookie_lifetime' => 0,
-        // Expired sessions are removed by Time to Live, not by PHP's garbage collection
+        // Expired sessions are removed by DynamoDB's Time to Live, not by PHP's garbage collection
         'session.gc_probability' => 0,
     ],
 ]);
 ```
 
 - `handler.table_name` is required; a `CakeException` is thrown when it is missing.
-- The table must exist, with a string partition key named `id`, and Time to Live should be
+- The table must exist, with a string partition key named `id`, and Time to Live must be
   enabled on the `expires` attribute (see [Creating the Session Table](#creating-the-session-table)).
 - The DynamoDB client is created with the `AsyncAws` configuration, so the plugin must be
   loaded and `AsyncAws` configured before the session starts.
@@ -236,7 +236,7 @@ on a default of the DynamoDB API that DynamoDB Local does not apply.
 
 ### Creating the Session Table
 
-Create the table and enable Time to Live with the AWS CLI:
+Create the table and enable Time to Live on the `expires` attribute with the AWS CLI:
 
 ```bash
 aws dynamodb create-table --table-name DYNAMODB_TABLE_NAME \
@@ -247,23 +247,54 @@ aws dynamodb update-time-to-live --table-name DYNAMODB_TABLE_NAME \
     --time-to-live-specification "Enabled=true,AttributeName=expires"
 ```
 
-### Removing Expired Sessions
+### How Sessions Expire
 
-PHP's garbage collection is not used. Expired sessions are removed in two ways instead:
+DynamoDB removes the expired sessions itself:
 
-- Each write and close of a session stores its expiration time (the current time plus
-  `session_lifetime`) in the `expires` attribute, and DynamoDB's
-  [Time to Live](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/TTL.html)
-  deletes the item after that time. Time to Live runs in the background and usually deletes
-  expired items within a few days.
-- Until then, reading a session whose `expires` time has passed returns an empty session and
-  deletes the item at once, so an expired session is never used again. This delete is best
-  effort: a failure is logged with the `session` scope and does not interrupt the request, and
-  the data of the expired session is removed when the empty session is written.
+- Each write and close of a session stores its expiration time, the current time plus
+  `session_lifetime`, in the `expires` attribute.
+- DynamoDB's [Time to Live](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/TTL.html)
+  deletes the items whose `expires` time has passed. It runs in the background at no cost but
+  lazily: an expired item can stay in the table for up to about 48 hours, sometimes longer.
+- Until then, the handler reads an expired session as an empty session without deleting it,
+  and the next write of that session replaces the old data. An expired session never comes back.
 
-`gc()` does nothing, so it never scans the table. Set `session.gc_probability` to `0` as in the
-example above; `DynamoDbSession` also sets it when it is created, because a call to `gc()` would
-not remove anything.
+PHP's session garbage collection is off: the example sets `session.gc_probability` to `0`, and
+`DynamoDbSession` also sets it to `0` when `Session.ini` does not contain
+`session.gc_probability`.
+
+### Garbage Collection
+
+`DynamoDbSession::gc()` can still delete the expired sessions, for tables without Time to Live.
+It scans the whole table for items whose `expires` time has passed and deletes them with
+`BatchWriteItem` (25 items per request, retrying unprocessed items a few times). Errors are
+logged with the `session` scope and never interrupt the request.
+
+A scan reads, and is charged for, every item of the table, and runs during the request that
+PHP picks for garbage collection, so keep it off when Time to Live is enabled. To turn it on,
+set the probability in `Session.ini`, for example once every 1000 session starts:
+
+```php
+Configure::write('Session', [
+    // ...
+    'ini' => [
+        'session.cookie_lifetime' => 0,
+        'session.gc_probability' => 1,
+        'session.gc_divisor' => 1000,
+    ],
+]);
+```
+
+### DynamoDB Local
+
+[DynamoDB Local](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html)
+accepts the Time to Live setting, but whether it deletes expired items depends on its version
+(the current `amazon/dynamodb-local` image does). Expired sessions are always read as empty;
+if they stay in the table, delete them by hand or turn on garbage collection in local
+development as shown above.
+
+`DynamoDbSession` sends every `UpdateItem` action explicitly, so sessions are stored in
+DynamoDB Local as well.
 
 ## DynamoDB Cache Engine
 
