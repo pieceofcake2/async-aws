@@ -50,8 +50,8 @@ exception of AsyncAws is thrown, for example `AsyncAws\Ses\Exception\MessageReje
 
 ## Mailer DSN
 
-With pieceofcake2/cakephp releases that support the `'dsn'` key of email profiles (the release
-after v2.12.6), the transport can be set with a DSN in the format of
+With pieceofcake2/cakephp 2.12.7 or later, which supports the `'dsn'` key of email profiles,
+the transport can be set with a DSN in the format of
 [Symfony's Amazon Mailer bridge](https://symfony.com/doc/current/mailer.html#using-a-3rd-party-transport),
 for example from the `MAILER_DSN` environment variable. Load the plugin with its bootstrap,
 which registers the `ses` schemes with `CakeEmail::setDsnClassMap()` (and also the

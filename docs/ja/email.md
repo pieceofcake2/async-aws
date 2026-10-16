@@ -50,7 +50,7 @@ AsyncAws の例外が投げられます。たとえば `AsyncAws\Ses\Exception\M
 
 ## メーラーの DSN
 
-メールプロファイルの `'dsn'` キーに対応した pieceofcake2/cakephp のリリース (v2.12.6 の次のリリース) では、
+メールプロファイルの `'dsn'` キーに対応した pieceofcake2/cakephp 2.12.7 以降では、
 [Symfony の Amazon Mailer ブリッジ](https://symfony.com/doc/current/mailer.html#using-a-3rd-party-transport)
 の形式の DSN で、たとえば環境変数 `MAILER_DSN` からトランスポートを設定できます。プラグインを
 ブートストラップ付きで読み込むと、`CakeEmail::setDsnClassMap()` で `ses` のスキームが登録されます
