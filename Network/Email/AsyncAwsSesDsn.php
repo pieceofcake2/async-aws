@@ -42,6 +42,8 @@ class AsyncAwsSesDsn
     {
         // A callable, not CakeEmail::setDsnClassMap(), so that the plugin also works with releases without it
         $setDsnClassMap = $setDsnClassMap ?? [CakeEmail::class, 'setDsnClassMap'];
+        // Always true with 2.12.7 or later, which PHPStan analyses against
+        // @phpstan-ignore function.alreadyNarrowedType
         if (!is_callable($setDsnClassMap)) {
             return false;
         }
