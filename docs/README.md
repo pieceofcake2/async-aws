@@ -77,8 +77,8 @@ If you already use `CakePlugin::loadAll()`, this is not necessary:
 CakePlugin::load('AsyncAws');
 ```
 
-To also register the [S3 stream wrapper](s3.md#s3-stream-wrapper), load the plugin with its
-bootstrap:
+To also register the [S3 stream wrapper](s3.md#s3-stream-wrapper) and the
+[Amazon SES mailer DSNs](email.md#mailer-dsn), load the plugin with its bootstrap:
 
 ```php
 CakePlugin::load('AsyncAws', ['bootstrap' => true]);

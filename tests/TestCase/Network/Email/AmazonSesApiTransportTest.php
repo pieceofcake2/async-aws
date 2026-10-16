@@ -142,6 +142,19 @@ class AmazonSesApiTransportTest extends CakeTestCase
         $this->assertSame('transport-token', $this->lastRequest()['headers']['x-amz-security-token']);
     }
 
+    public function testSendWithEndpoint(): void
+    {
+        $this->queueJson(['MessageId' => 'message-id']);
+
+        $this->email(['endpoint' => 'https://ses.example.com:8443'])
+            ->from('from@example.com')
+            ->to('to@example.com')
+            ->subject('Hello')
+            ->send('Body');
+
+        $this->assertSame('https://ses.example.com:8443/v2/email/outbound-emails', $this->lastRequest()['url']);
+    }
+
     public function testSendFailure(): void
     {
         $this->responses[] = new MockResponse(

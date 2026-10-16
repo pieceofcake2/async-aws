@@ -28,6 +28,7 @@ class AmazonSesApiTransport extends AbstractTransport
         'key' => null,
         'secret' => null,
         'token' => null,
+        'endpoint' => null,
     ];
 
     private AsyncAwsComponent $AsyncAws;
@@ -73,6 +74,9 @@ class AmazonSesApiTransport extends AbstractTransport
         $clientConfig = [];
         if (!empty($this->_config['region'])) {
             $clientConfig['region'] = $this->_config['region'];
+        }
+        if (!empty($this->_config['endpoint'])) {
+            $clientConfig['endpoint'] = $this->_config['endpoint'];
         }
         if (!empty($this->_config['key']) && !empty($this->_config['secret'])) {
             $clientConfig['credentials'] = [
