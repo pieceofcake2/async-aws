@@ -75,7 +75,7 @@ class S3StreamWrapperTest extends CakeTestCase
      * @param callable $fn Function.
      * @return mixed
      */
-    private function quietly(callable $fn)
+    private function quietly(callable $fn): mixed
     {
         set_error_handler(function (int $errno, string $message): bool {
             $this->warnings[] = $message;
