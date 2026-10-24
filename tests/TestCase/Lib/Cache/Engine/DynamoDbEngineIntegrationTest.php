@@ -1,8 +1,5 @@
 <?php
 
-App::uses('Cache', 'Cache');
-App::uses('DynamoDbEngine', 'AsyncAws.Cache/Engine');
-
 /**
  * Runs the DynamoDB cache engine against DynamoDB Local.
  *

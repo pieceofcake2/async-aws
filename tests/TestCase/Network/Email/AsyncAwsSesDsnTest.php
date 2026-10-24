@@ -1,8 +1,5 @@
 <?php
 
-App::uses('AsyncAwsSesDsn', 'AsyncAws.Network/Email');
-App::uses('CakeEmail', 'Network/Email');
-
 class AsyncAwsSesDsnTest extends CakeTestCase
 {
     use MockAsyncAwsTrait;

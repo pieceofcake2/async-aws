@@ -2,11 +2,6 @@
 
 use AsyncAws\DynamoDb\DynamoDbClient;
 
-App::uses('AsyncAwsComponent', 'AsyncAws.Controller/Component');
-App::uses('ComponentCollection', 'Controller');
-App::uses('DynamoDbSession', 'AsyncAws.Model/Datasource/Session');
-App::uses('SessionHandlerAdapter', 'Model/Datasource/Session');
-
 /**
  * Counts the calls of gc().
  */

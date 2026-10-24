@@ -7,9 +7,6 @@ use AsyncAws\S3\S3Client;
 use AsyncAws\Ses\SesClient;
 use AsyncAws\SimpleS3\SimpleS3Client;
 
-App::uses('AsyncAwsComponent', 'AsyncAws.Controller/Component');
-App::uses('ComponentCollection', 'Controller');
-
 class AsyncAwsComponentTest extends CakeTestCase
 {
     use MockAsyncAwsTrait;

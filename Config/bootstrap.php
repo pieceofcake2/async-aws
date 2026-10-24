@@ -11,8 +11,5 @@
  * without `CakeEmail::setDsnClassMap()`.
  */
 
-App::uses('S3StreamWrapper', 'AsyncAws.Lib');
-App::uses('AsyncAwsSesDsn', 'AsyncAws.Network/Email');
-
 S3StreamWrapper::bootstrap();
 AsyncAwsSesDsn::register();

@@ -84,6 +84,8 @@ CakePlugin::load('AsyncAws');
 CakePlugin::load('AsyncAws', ['bootstrap' => true]);
 ```
 
+プラグインのクラス (`S3Storage`、`S3StreamWrapper` など) は Composer が読み込むため、`App::uses()` は不要です。
+
 <a id="asyncaws-configuration"></a>
 
 ## AsyncAws の設定

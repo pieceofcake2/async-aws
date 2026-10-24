@@ -1,13 +1,5 @@
 <?php
 
-App::uses('AsyncAwsComponent', 'AsyncAws.Controller/Component');
-App::uses('ComponentCollection', 'Controller');
-App::uses('DynamoDbSession', 'AsyncAws.Model/Datasource/Session');
-App::uses('AmazonSesApiTransport', 'AsyncAws.Network/Email');
-App::uses('MissingPackageException', 'AsyncAws.Error');
-App::uses('S3Storage', 'AsyncAws.Lib');
-App::uses('S3StreamWrapper', 'AsyncAws.Lib');
-
 /**
  * Tests an installation with async-aws/dynamo-db as the only service package, as the "Minimal install" CI job does:
  *

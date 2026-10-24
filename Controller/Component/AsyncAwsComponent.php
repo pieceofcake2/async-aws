@@ -10,10 +10,6 @@ use AsyncAws\SimpleS3\SimpleS3Client;
 use Psr\Log\LoggerInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
-App::uses('Component', 'Controller');
-App::uses('Configure', 'Core');
-App::uses('MissingPackageException', 'AsyncAws.Error');
-
 /**
  * AsyncAws Component
  *

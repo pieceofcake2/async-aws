@@ -2,12 +2,6 @@
 
 use AsyncAws\Ses\SesClient;
 
-App::uses('AbstractTransport', 'Network/Email');
-App::uses('CakeEmail', 'Network/Email');
-App::uses('ComponentCollection', 'Controller');
-App::uses('AsyncAwsComponent', 'AsyncAws.Controller/Component');
-App::uses('MissingPackageException', 'AsyncAws.Error');
-
 /**
  * Amazon SES Email Transport for CakePHP 2.x.
  *

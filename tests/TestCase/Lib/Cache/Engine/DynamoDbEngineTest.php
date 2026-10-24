@@ -3,11 +3,6 @@
 use AsyncAws\Core\Credentials\NullProvider;
 use AsyncAws\DynamoDb\DynamoDbClient;
 
-App::uses('Cache', 'Cache');
-App::uses('CakeLog', 'Log');
-App::uses('CakeLogInterface', 'Log');
-App::uses('DynamoDbEngine', 'AsyncAws.Cache/Engine');
-
 /**
  * Collects the log messages written during a test.
  */

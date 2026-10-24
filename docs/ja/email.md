@@ -33,8 +33,6 @@ SES クライアントは `AsyncAws` 設定から作成されます。メール�
 `CakeEmail::send()` は SES のメッセージ ID を `id` として返します。
 
 ```php
-App::uses('CakeEmail', 'Network/Email');
-
 $email = new CakeEmail('default');
 $result = $email->to('user@example.com')
     ->subject('Welcome')

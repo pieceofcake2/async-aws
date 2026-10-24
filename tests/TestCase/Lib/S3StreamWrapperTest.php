@@ -5,10 +5,6 @@ use AsyncAws\SimpleS3\SimpleS3Client;
 use Composer\InstalledVersions;
 use Symfony\Component\HttpClient\Response\MockResponse;
 
-App::uses('CakeLog', 'Log');
-App::uses('CakeLogInterface', 'Log');
-App::uses('S3StreamWrapper', 'AsyncAws.Lib');
-
 /**
  * Collects the log messages written during a test.
  */

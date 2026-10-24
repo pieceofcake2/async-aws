@@ -1,8 +1,5 @@
 <?php
 
-App::uses('CakeEmail', 'Network/Email');
-App::uses('AsyncAwsComponent', 'AsyncAws.Controller/Component');
-
 /**
  * Mailer DSN schemes of Amazon SES, in the format of Symfony's Amazon Mailer bridge.
  *

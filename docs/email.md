@@ -35,8 +35,6 @@ The transport sends the text and HTML parts, the `To`, `Cc`, `Bcc` and `Reply-To
 addresses, and the attachments. `CakeEmail::send()` returns the SES message ID as `id`:
 
 ```php
-App::uses('CakeEmail', 'Network/Email');
-
 $email = new CakeEmail('default');
 $result = $email->to('user@example.com')
     ->subject('Welcome')

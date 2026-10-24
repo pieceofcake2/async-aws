@@ -6,13 +6,6 @@ use AsyncAws\DynamoDb\DynamoDbClient;
 use AsyncAws\DynamoDb\Exception\ConditionalCheckFailedException;
 use AsyncAws\DynamoDb\ValueObject\AttributeValue;
 
-App::uses('CacheEngine', 'Cache');
-App::uses('ComponentCollection', 'Controller');
-App::uses('AsyncAwsComponent', 'AsyncAws.Controller/Component');
-App::uses('CakeLog', 'Log');
-App::uses('Inflector', 'Utility');
-App::uses('MissingPackageException', 'AsyncAws.Error');
-
 /**
  * DynamoDB storage engine for cache
  *
