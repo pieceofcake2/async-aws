@@ -3,10 +3,6 @@
 use AsyncAws\SimpleS3\SimpleS3Client;
 use Composer\InstalledVersions;
 
-App::uses('File', 'Utility');
-App::uses('Folder', 'Utility');
-App::uses('S3StreamWrapper', 'AsyncAws.Lib');
-
 /**
  * Runs the S3 stream wrapper against an S3 compatible server, e.g. MinIO.
  *

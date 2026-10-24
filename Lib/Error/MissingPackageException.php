@@ -1,7 +1,5 @@
 <?php
 
-App::uses('CakeException', 'Error');
-
 /**
  * Thrown when a feature of the plugin is used but the AsyncAws package of its service is not installed.
  *

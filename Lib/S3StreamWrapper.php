@@ -7,11 +7,6 @@ use AsyncAws\S3\S3Client;
 use AsyncAws\S3\ValueObject\CommonPrefix;
 use AsyncAws\SimpleS3\SimpleS3Client;
 
-App::uses('AsyncAwsComponent', 'AsyncAws.Controller/Component');
-App::uses('CakeLog', 'Log');
-App::uses('CakeResponse', 'Network');
-App::uses('MissingPackageException', 'AsyncAws.Error');
-
 /**
  * Amazon S3 stream wrapper
  *

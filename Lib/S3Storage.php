@@ -2,10 +2,6 @@
 
 use AsyncAws\SimpleS3\SimpleS3Client;
 
-App::uses('ComponentCollection', 'Controller');
-App::uses('AsyncAwsComponent', 'AsyncAws.Controller/Component');
-App::uses('MissingPackageException', 'AsyncAws.Error');
-
 /**
  * S3 storage helper
  *

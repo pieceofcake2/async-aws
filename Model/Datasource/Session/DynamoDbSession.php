@@ -4,13 +4,6 @@ use AsyncAws\Core\Exception\Exception as AsyncAwsException;
 use AsyncAws\DynamoDb\DynamoDbClient;
 use AsyncAws\DynamoDb\Exception\ConditionalCheckFailedException;
 
-App::uses('CakeSessionHandlerInterface', 'Model/Datasource/Session');
-App::uses('ComponentCollection', 'Controller');
-App::uses('AsyncAwsComponent', 'AsyncAws.Controller/Component');
-App::uses('CakeException', 'Error');
-App::uses('CakeLog', 'Log');
-App::uses('MissingPackageException', 'AsyncAws.Error');
-
 /**
  * DynamoDB session handler
  *

@@ -3,14 +3,6 @@
 use AsyncAws\Core\AwsClientFactory;
 use AsyncAws\Core\Sts\StsClient;
 
-App::uses('AsyncAwsComponent', 'AsyncAws.Controller/Component');
-App::uses('ComponentCollection', 'Controller');
-App::uses('DynamoDbEngine', 'AsyncAws.Cache/Engine');
-App::uses('DynamoDbSession', 'AsyncAws.Model/Datasource/Session');
-App::uses('AmazonSesApiTransport', 'AsyncAws.Network/Email');
-App::uses('MissingPackageException', 'AsyncAws.Error');
-App::uses('S3Storage', 'AsyncAws.Lib');
-
 /**
  * Component that behaves as if no service package was installed.
  */

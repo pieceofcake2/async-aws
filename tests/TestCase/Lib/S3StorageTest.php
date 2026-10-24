@@ -4,8 +4,6 @@ use AsyncAws\S3\Exception\NoSuchKeyException;
 use AsyncAws\SimpleS3\SimpleS3Client;
 use Symfony\Component\HttpClient\Response\MockResponse;
 
-App::uses('S3Storage', 'AsyncAws.Lib');
-
 class S3StorageTest extends CakeTestCase
 {
     use MockAsyncAwsTrait;

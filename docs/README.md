@@ -84,6 +84,9 @@ To also register the [S3 stream wrapper](s3.md#s3-stream-wrapper) and the
 CakePlugin::load('AsyncAws', ['bootstrap' => true]);
 ```
 
+Composer loads the classes of the plugin, e.g. `S3Storage` and `S3StreamWrapper`, so they need
+no `App::uses()`.
+
 ## AsyncAws Configuration
 
 All clients are created from the `AsyncAws` configuration. Set it in `config/core.php`

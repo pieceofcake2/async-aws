@@ -7,12 +7,8 @@
  * logged and the wrapper is not registered.
  *
  * Registers the Symfony Mailer style DSNs of Amazon SES (`ses+api://`, `ses+https://`, `ses+smtp://`, ...) for the
- * `'dsn'` key of email profiles, e.g. `'dsn' => env('MAILER_DSN')`. Skipped on pieceofcake2/cakephp releases
- * without `CakeEmail::setDsnClassMap()`.
+ * `'dsn'` key of email profiles, e.g. `'dsn' => env('MAILER_DSN')`.
  */
-
-App::uses('S3StreamWrapper', 'AsyncAws.Lib');
-App::uses('AsyncAwsSesDsn', 'AsyncAws.Network/Email');
 
 S3StreamWrapper::bootstrap();
 AsyncAwsSesDsn::register();

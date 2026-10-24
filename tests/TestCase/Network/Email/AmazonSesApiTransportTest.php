@@ -3,9 +3,6 @@
 use AsyncAws\Ses\Exception\MessageRejectedException;
 use Symfony\Component\HttpClient\Response\MockResponse;
 
-App::uses('AmazonSesApiTransport', 'AsyncAws.Network/Email');
-App::uses('CakeEmail', 'Network/Email');
-
 class AmazonSesApiTransportTest extends CakeTestCase
 {
     use MockAsyncAwsTrait;

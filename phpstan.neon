@@ -12,11 +12,3 @@ parameters:
         - Network
     bootstrapFiles:
         - tests/bootstrap.php
-    ignoreErrors:
-        # CacheEngine::increment()/decrement() document "@return New incremented value" in pieceofcake2/cakephp
-        # v2.12.5 and earlier. Fixed on 2.x (fe906bf); remove this entry once a release contains the fix.
-        -
-            identifier: method.childReturnType
-            path: Lib/Cache/Engine/DynamoDbEngine.php
-            count: 2
-            reportUnmatched: false
