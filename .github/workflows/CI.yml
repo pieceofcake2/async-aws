@@ -38,12 +38,6 @@ jobs:
           - '8.3'
           - '8.4'
           - '8.5'
-        cakephp:
-          - ''
-        include:
-          # The previous minor version of CakePHP
-          - php-version: '8.4'
-            cakephp: '2.12.*'
 
     steps:
       - name: Checkout
@@ -65,13 +59,9 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
-          key: ${{ runner.os }}-php${{ matrix.php-version }}-composer${{ matrix.cakephp && '-cakephp212' || '' }}-${{ hashFiles('**/composer.json') }}
+          key: ${{ runner.os }}-php${{ matrix.php-version }}-composer-${{ hashFiles('**/composer.json') }}
           restore-keys: |
             ${{ runner.os }}-php${{ matrix.php-version }}-composer-
-
-      - name: Use the previous minor version of CakePHP
-        if: ${{ matrix.cakephp != '' }}
-        run: composer require --no-update --no-interaction "pieceofcake2/cakephp:${{ matrix.cakephp }}"
 
       - name: Install Composer Packages
         run: composer install --prefer-dist --no-interaction --no-progress
@@ -92,7 +82,7 @@ jobs:
         uses: pieceofcake2/ci-summary@v1
         with:
           type: junit
-          title: Unit tests — PHP ${{ matrix.php-version }}${{ matrix.cakephp && format(' CakePHP {0}', matrix.cakephp) || '' }}
+          title: Unit tests — PHP ${{ matrix.php-version }}
           file: junit.xml
           coverage: coverage.xml
 
@@ -103,16 +93,16 @@ jobs:
           use_oidc: true
           report_type: test_results
           files: ./junit.xml
-          flags: php${{ matrix.php-version }}${{ matrix.cakephp && '-cakephp212' || '' }}
-          name: PHP ${{ matrix.php-version }}${{ matrix.cakephp && format(' CakePHP {0}', matrix.cakephp) || '' }}
+          flags: php${{ matrix.php-version }}
+          name: PHP ${{ matrix.php-version }}
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v7
         with:
           use_oidc: true
           files: ./coverage.xml
-          flags: php${{ matrix.php-version }}${{ matrix.cakephp && '-cakephp212' || '' }}
-          name: PHP ${{ matrix.php-version }}${{ matrix.cakephp && format(' CakePHP {0}', matrix.cakephp) || '' }}
+          flags: php${{ matrix.php-version }}
+          name: PHP ${{ matrix.php-version }}
 
       - name: Upload coverage reports to Qlty
         uses: qltysh/qlty-action/coverage@v2
@@ -122,7 +112,7 @@ jobs:
           files: coverage.xml
           format: clover
           incomplete: true
-          name: PHP ${{ matrix.php-version }}${{ matrix.cakephp && format(' CakePHP {0}', matrix.cakephp) || '' }}
+          name: PHP ${{ matrix.php-version }}
 
   qlty:
     runs-on: ubuntu-latest

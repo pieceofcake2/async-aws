@@ -33,17 +33,11 @@ class AsyncAwsSesDsn
      * `CakeEmail::setDsnClassMap()`.
      *
      * @param callable|null $setDsnClassMap The function that registers the map. Default: `CakeEmail::setDsnClassMap()`.
-     * @return bool `false` when the installed pieceofcake2/cakephp has no DSN class map.
+     * @return bool Always `true`.
      */
     public static function register(?callable $setDsnClassMap = null): bool
     {
-        // A callable, not CakeEmail::setDsnClassMap(), so that the plugin also works with releases without it
         $setDsnClassMap = $setDsnClassMap ?? [CakeEmail::class, 'setDsnClassMap'];
-        // Always true with 2.12.7 or later, which PHPStan analyses against
-        // @phpstan-ignore function.alreadyNarrowedType
-        if (!is_callable($setDsnClassMap)) {
-            return false;
-        }
         $setDsnClassMap(static::classMap());
 
         return true;

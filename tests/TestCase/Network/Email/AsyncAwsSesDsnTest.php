@@ -5,9 +5,9 @@ class AsyncAwsSesDsnTest extends CakeTestCase
     use MockAsyncAwsTrait;
 
     /**
-     * @var array<string, mixed>|null
+     * @var array<string, mixed>
      */
-    private ?array $dsnClassMap = null;
+    private array $dsnClassMap = [];
 
     private ?string $awsRegion = null;
 
@@ -22,9 +22,7 @@ class AsyncAwsSesDsnTest extends CakeTestCase
         $this->awsDefaultRegion = getenv('AWS_DEFAULT_REGION') === false ? null : getenv('AWS_DEFAULT_REGION');
         putenv('AWS_REGION');
         putenv('AWS_DEFAULT_REGION');
-        if (method_exists('CakeEmail', 'getDsnClassMap')) {
-            $this->dsnClassMap = CakeEmail::getDsnClassMap();
-        }
+        $this->dsnClassMap = CakeEmail::getDsnClassMap();
     }
 
     public function tearDown(): void
@@ -33,11 +31,9 @@ class AsyncAwsSesDsnTest extends CakeTestCase
         Configure::delete('Aws');
         putenv($this->awsRegion === null ? 'AWS_REGION' : 'AWS_REGION=' . $this->awsRegion);
         putenv($this->awsDefaultRegion === null ? 'AWS_DEFAULT_REGION' : 'AWS_DEFAULT_REGION=' . $this->awsDefaultRegion);
-        if ($this->dsnClassMap !== null) {
-            $property = new ReflectionProperty('CakeEmail', '_dsnClassMap');
-            $property->setAccessible(true);
-            $property->setValue(null, $this->dsnClassMap);
-        }
+        $property = new ReflectionProperty('CakeEmail', '_dsnClassMap');
+        $property->setAccessible(true);
+        $property->setValue(null, $this->dsnClassMap);
         parent::tearDown();
     }
 
@@ -117,12 +113,6 @@ class AsyncAwsSesDsnTest extends CakeTestCase
 
     public function testRegister(): void
     {
-        if (!method_exists('CakeEmail', 'setDsnClassMap')) {
-            $this->assertFalse(AsyncAwsSesDsn::register());
-
-            return;
-        }
-
         $this->assertTrue(AsyncAwsSesDsn::register());
         $map = CakeEmail::getDsnClassMap();
         foreach (['ses', 'ses+api', 'ses+https', 'ses+smtp', 'ses+smtps'] as $scheme) {
@@ -140,8 +130,6 @@ class AsyncAwsSesDsnTest extends CakeTestCase
 
     public function testSendWithMailerDsn(): void
     {
-        $this->skipIf(!method_exists('CakeEmail', 'setDsnClassMap'), 'pieceofcake2/cakephp has no DSN class map.');
-
         $this->mockAsyncAws(['region' => 'ap-northeast-1']);
         $this->queueJson(['MessageId' => 'dsn-message-id']);
         AsyncAwsSesDsn::register();
